@@ -557,9 +557,83 @@ dialog form,.dbody{display:flex;flex-direction:column;gap:14px;padding:20px}
   };
 });
 </script>
+<script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-auth-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore-compat.js"></script>
 <script>
+/* Financia cloud bootstrap. Firebase web config is public; never put service-account secrets here. */
 (function () {
+  'use strict';
+  var app = document.getElementById('app');
+  var cfg = window.FINANCIA_FIREBASE_CONFIG = window.FINANCIA_FIREBASE_CONFIG || {
+    apiKey: 'AIzaSyBHoIyFoG2MgF7Wy_fOl16pV3DdmmOL-sI',
+    authDomain: 'financia-57085.firebaseapp.com',
+    projectId: 'financia-57085',
+    appId: '1:434454991701:web:35723c4cacf82a31c0d5dc',
+    messagingSenderId: '434454991701',
+  };
+  var configured = cfg.apiKey && cfg.apiKey.indexOf('REEMPLAZAR_') !== 0 &&
+    cfg.projectId && cfg.projectId.indexOf('REEMPLAZAR_') !== 0 &&
+    cfg.appId && cfg.appId.indexOf('REEMPLAZAR_') !== 0;
+  window.FINANCIA_CLOUD_READY = false;
+  window.FINANCIA_CLOUD_PROMISE = new Promise(function (resolve) {
+    function panel(title, message, buttonText, action) {
+      app.innerHTML = '<section style="max-width:480px;margin:8vh auto;padding:28px;border:1px solid #e5e7eb;border-radius:20px;font:16px/1.5 system-ui;color:#172033;background:#fff"><div style="font-size:13px;font-weight:800;letter-spacing:.12em;color:#64748b">FINANCIA</div><h1 style="font-size:27px;margin:12px 0">' + title + '</h1><p style="color:#475569">' + message + '</p>' + (buttonText ? '<button id="financia-cloud-action" style="width:100%;padding:13px;border:0;border-radius:12px;background:#2563eb;color:white;font-weight:700;cursor:pointer">' + buttonText + '</button>' : '') + '<p id="financia-cloud-error" style="font-size:13px;color:#b91c1c;margin-top:14px"></p></section>';
+      if (action) document.getElementById('financia-cloud-action').addEventListener('click', action);
+    }
+    if (!configured) {
+      panel('Configuración pendiente', 'La integración segura está preparada en el código, pero falta añadir la configuración web de tu proyecto Firebase. La aplicación no mostrará datos financieros hasta completar este paso.', '', null);
+      return;
+    }
+    try {
+      if (!firebase.apps.length) firebase.initializeApp(cfg);
+    } catch (e) {
+      panel('No se pudo iniciar Firebase', 'Revisa la configuración web del proyecto Firebase.', '', null);
+      return;
+    }
+    var auth = firebase.auth();
+    var db = firebase.firestore();
+    var finished = false;
+    panel('Tu dinero, bajo tu control', 'Inicia sesión con Google para acceder a tus datos financieros privados y sincronizarlos en tus dispositivos.', 'Continuar con Google', function () {
+      var btn = document.getElementById('financia-cloud-action');
+      btn.disabled = true; btn.textContent = 'Conectando…';
+      auth.signInWithPopup(new firebase.auth.GoogleAuthProvider()).catch(function (e) {
+        var error = document.getElementById('financia-cloud-error');
+        if (error) error.textContent = e.code === 'auth/unauthorized-domain'
+          ? 'Este dominio aún no está autorizado en Firebase Authentication.'
+          : 'No se pudo iniciar sesión. Inténtalo de nuevo (' + (e.code || 'error') + ').';
+        btn.disabled = false; btn.textContent = 'Continuar con Google';
+      });
+    });
+    auth.onAuthStateChanged(async function (user) {
+      if (!user || finished) return;
+      finished = true;
+      panel('Cargando tus datos…', 'Estamos recuperando de forma segura la información de tu cuenta.', '', null);
+      try {
+        var ref = db.collection('users').doc(user.uid).collection('finance').doc('main');
+        var snap = await ref.get();
+        window.FINANCIA_UID = user.uid;
+        window.FINANCIA_USER = { displayName: user.displayName || '', email: user.email || '', photoURL: user.photoURL || '' };
+        window.FINANCIA_INITIAL_STATE = snap.exists && snap.data() && snap.data().state ? snap.data().state : null;
+        window.FINANCIA_CLOUD_SAVE = function (state) {
+          if (!window.FINANCIA_UID) return Promise.reject(new Error('Sesión no disponible'));
+          return ref.set({ state: state, updatedAt: firebase.firestore.FieldValue.serverTimestamp() }, { merge: true });
+        };
+        window.FINANCIA_CLOUD_SIGNOUT = function () { return auth.signOut(); };
+        window.FINANCIA_CLOUD_READY = true;
+        resolve(true);
+      } catch (e) {
+        finished = false;
+        panel('No pudimos cargar tus datos', 'Comprueba que Firestore esté creado y que las reglas de seguridad estén publicadas. No se han mostrado datos locales de otro usuario.', 'Reintentar', function () { location.reload(); });
+      }
+    });
+  });
+})();
+</script>
+<script>
+(async function () {
 'use strict';
+if (!window.FINANCIA_CLOUD_READY) { await window.FINANCIA_CLOUD_PROMISE; if (!window.FINANCIA_CLOUD_READY) return; }
 var C = window.FinCalc;
 var $ = function (s, r) { return (r || document).querySelector(s); };
 var esc = function (s) { return String(s == null ? '' : s).replace(/[&<>"']/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]; }); };
@@ -588,7 +662,7 @@ var ICONS = {
 function ic(n) { return '<svg class="ic" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">' + ICONS[n] + '</svg>'; }
 
 /* ---------- Estado y almacenamiento (solo en este navegador) ---------- */
-var KEY = 'financia.v1';
+var KEY = 'financia.v1.' + (window.FINANCIA_UID || 'local');
 var EXP_CATS = [['Vivienda', 'needs'], ['Alimentación', 'needs'], ['Transporte', 'needs'], ['Educación', 'needs'], ['Salud', 'needs'], ['Entretenimiento', 'wants'], ['Deudas', 'needs'], ['Compras personales', 'wants'], ['Ahorro', 'savings'], ['Inversiones', 'savings'], ['Otros', 'wants']];
 var INC_CATS = ['Sueldo', 'Honorarios', 'Trabajos independientes', 'Negocios', 'Rentabilidad de inversiones', 'Otros ingresos'];
 var ACCOUNTS = ['Cuenta corriente', 'Cuenta Vista / RUT', 'Tarjeta de débito', 'Tarjeta de crédito', 'Efectivo'];
@@ -608,11 +682,24 @@ function sane(s) {
   return true;
 }
 function load() {
+  if (window.FINANCIA_INITIAL_STATE && sane(window.FINANCIA_INITIAL_STATE)) { var cloudState = window.FINANCIA_INITIAL_STATE; var cloudBase = blank(); cloudState.settings = Object.assign(cloudBase.settings, cloudState.settings); cloudState.settings.pcts = Object.assign(cloudBase.settings.pcts, cloudState.settings.pcts); return cloudState; }
   try { var raw = localStorage.getItem(KEY); if (raw) { var s = JSON.parse(raw); if (sane(s)) { var b = blank(); s.settings = Object.assign(b.settings, s.settings); s.settings.pcts = Object.assign(b.settings.pcts, s.settings.pcts); return s; } } } catch (e) { storageOK = false; }
   return blank();
 }
 var S = load();
-function save() { try { localStorage.setItem(KEY, JSON.stringify(S)); } catch (e) { storageOK = false; } }
+var cloudSaveTimer = null;
+function save() {
+  try { localStorage.setItem(KEY, JSON.stringify(S)); } catch (e) { storageOK = false; }
+  if (window.FINANCIA_CLOUD_SAVE) {
+    if (cloudSaveTimer) clearTimeout(cloudSaveTimer);
+    cloudSaveTimer = setTimeout(function () {
+      window.FINANCIA_CLOUD_SAVE(S).catch(function () {
+        var t = document.getElementById('toast');
+        if (t) { t.textContent = 'No se pudo sincronizar en la nube. Revisa tu conexión antes de cerrar la página.'; t.classList.add('show'); }
+      });
+    }, 700);
+  }
+}
 
 var ui = { route: 'resumen', month: C.monthKey(today()), f: { q: '', cat: '', type: '', from: '', to: '', limit: 50 }, cmp: null, base: null, extra: 0, strategy: 'avalanche', histOpen: {}, ob: null, pending: null, dup: null };
 var ROUTES = { resumen: 'Resumen', movimientos: 'Movimientos', presupuesto: 'Presupuesto', metas: 'Metas', deudas: 'Deudas', ajustes: 'Ajustes' };
