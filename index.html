@@ -1225,4 +1225,67 @@ window.addEventListener('hashchange', function () { var h = (location.hash || ''
 })();
 </script>
 
+
+<!-- Financia feedback widget: requires the Worker route POST /api/feedback -->
+<style>
+#fin-feedback-launch{position:fixed;right:18px;bottom:18px;z-index:9998;border:0;border-radius:999px;padding:13px 18px;background:#123B35;color:#fff;font:600 14px system-ui;box-shadow:0 8px 24px #123b3533;cursor:pointer}
+#fin-feedback-panel{position:fixed;inset:0;z-index:9999;display:none;align-items:center;justify-content:center;padding:16px;background:#071a18aa;font:14px system-ui}
+#fin-feedback-panel[aria-hidden="false"]{display:flex}
+#fin-feedback-card{background:#fff;color:#18312d;border-radius:18px;padding:22px;width:min(100%,460px);max-height:90vh;overflow:auto;box-shadow:0 20px 60px #0004}
+#fin-feedback-card h2{margin:0 0 8px;font-size:22px}
+#fin-feedback-card p{color:#52645f;line-height:1.45}
+#fin-feedback-card label{display:block;font-weight:600;margin:14px 0 6px}
+#fin-feedback-card select,#fin-feedback-card textarea,#fin-feedback-card input{box-sizing:border-box;width:100%;padding:11px;border:1px solid #cbd8d3;border-radius:9px;font:inherit;background:white;color:#18312d}
+#fin-feedback-card textarea{min-height:85px;resize:vertical}
+#fin-feedback-actions{display:flex;gap:8px;margin-top:16px}
+#fin-feedback-actions button{flex:1;border:0;border-radius:9px;padding:12px;font:600 14px system-ui;cursor:pointer}
+#fin-feedback-send{background:#123B35;color:white}#fin-feedback-close{background:#edf3f0;color:#18312d}
+#fin-feedback-status{min-height:20px;font-weight:600;margin-top:12px}
+#fin-feedback-honey{position:absolute;left:-9999px}
+</style>
+<button id="fin-feedback-launch" type="button" aria-haspopup="dialog">Enviar comentarios</button>
+<div id="fin-feedback-panel" aria-hidden="true">
+  <section id="fin-feedback-card" role="dialog" aria-modal="true" aria-labelledby="fin-feedback-title">
+    <h2 id="fin-feedback-title">Ayúdanos a mejorar Financia</h2>
+    <p>Tu opinión nos ayuda a mejorar la experiencia. No incluyas contraseñas ni información bancaria.</p>
+    <form id="fin-feedback-form">
+      <label for="fin-feedback-rating">¿Cómo evaluarías tu experiencia?</label>
+      <select id="fin-feedback-rating" name="rating" required>
+        <option value="">Selecciona una opción</option><option value="5">5 — Excelente</option><option value="4">4 — Muy buena</option><option value="3">3 — Buena</option><option value="2">2 — Regular</option><option value="1">1 — Mala</option>
+      </select>
+      <label for="fin-feedback-ease">¿Fue fácil utilizar Financia?</label>
+      <select id="fin-feedback-ease" name="ease" required><option value="easy">Sí, bastante</option><option value="medium">Más o menos</option><option value="hard">Me costó</option></select>
+      <label for="fin-feedback-features">¿Qué función te gustaría mejorar o agregar?</label>
+      <input id="fin-feedback-features" name="feature" maxlength="120" placeholder="Ej.: metas de ahorro">
+      <label for="fin-feedback-message">Comentarios o sugerencias</label>
+      <textarea id="fin-feedback-message" name="message" maxlength="2000" required placeholder="Cuéntanos qué te pareció..."></textarea>
+      <label for="fin-feedback-email">Correo (opcional)</label>
+      <input id="fin-feedback-email" name="email" type="email" maxlength="254" autocomplete="email" placeholder="correo@ejemplo.com">
+      <input id="fin-feedback-honey" name="website" tabindex="-1" autocomplete="off" aria-hidden="true">
+      <div id="fin-feedback-actions"><button id="fin-feedback-close" type="button">Cancelar</button><button id="fin-feedback-send" type="submit">Enviar</button></div>
+      <div id="fin-feedback-status" role="status" aria-live="polite"></div>
+    </form>
+  </section>
+</div>
+<script>
+(function(){
+  var launch=document.getElementById('fin-feedback-launch'), panel=document.getElementById('fin-feedback-panel'), form=document.getElementById('fin-feedback-form'), close=document.getElementById('fin-feedback-close'), send=document.getElementById('fin-feedback-send'), status=document.getElementById('fin-feedback-status');
+  function show(open){panel.setAttribute('aria-hidden',open?'false':'true');if(open)document.getElementById('fin-feedback-rating').focus();else launch.focus();}
+  launch.addEventListener('click',function(){show(true);});close.addEventListener('click',function(){show(false);});
+  panel.addEventListener('click',function(e){if(e.target===panel)show(false);});
+  form.addEventListener('submit',async function(e){
+    e.preventDefault(); status.textContent='Enviando…';send.disabled=true;
+    var d=new FormData(form), payload={rating:Number(d.get('rating')),ease:String(d.get('ease')||''),feature:String(d.get('feature')||''),message:String(d.get('message')||''),email:String(d.get('email')||''),website:String(d.get('website')||'')};
+    try{
+      var res=await fetch('/api/feedback',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload),credentials:'same-origin'});
+      var result=await res.json().catch(function(){return {};});
+      if(!res.ok)throw new Error(result.error||'No se pudo guardar el comentario. Inténtalo más tarde.');
+      form.reset();status.textContent='¡Gracias! Tu comentario quedó guardado.';status.style.color='#176b45';
+      setTimeout(function(){show(false);status.textContent='';},1800);
+    }catch(err){status.textContent=err.message||'No se pudo enviar. Comprueba tu conexión e inténtalo de nuevo.';status.style.color='#a52d2d';}
+    finally{send.disabled=false;}
+  });
+})();
+</script>
+
 </body></html>
