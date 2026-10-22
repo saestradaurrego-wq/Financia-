@@ -49,7 +49,7 @@ a{color:var(--primary)}
 .shell{display:grid;grid-template-columns:244px minmax(0,1fr);min-height:100vh}
 .side{position:sticky;top:0;align-self:start;height:100vh;display:flex;flex-direction:column;gap:20px;padding:22px 14px 18px max(16px,env(safe-area-inset-left,0px));background:var(--surface);border-right:1px solid var(--line)}
 .brand{display:flex;align-items:center;gap:10px;font-family:var(--font-display);font-weight:700;font-size:1.3rem;padding:0 6px}
-.brand svg{width:30px;height:30px}
+.brand svg{width:38px;height:38px;flex:none;filter:drop-shadow(0 3px 5px rgba(18,59,53,.14))}.brand-name{font-size:1.42rem;font-weight:700;letter-spacing:-.035em;color:var(--ink)}
 .nav{display:flex;flex-direction:column;gap:2px}
 .nav a{display:flex;align-items:center;gap:12px;padding:10px 12px;border-radius:10px;color:var(--muted);text-decoration:none;font-weight:600}
 .nav a:hover{background:var(--surface2);color:var(--ink)}
@@ -772,7 +772,7 @@ function shell() {
   var items = [['resumen', 'home'], ['movimientos', 'list'], ['presupuesto', 'pie'], ['metas', 'target'], ['deudas', 'card'], ['ajustes', 'gear']];
   var nav = items.map(function (it) { return '<a href="#' + it[0] + '" data-act="nav" data-route="' + it[0] + '"' + (ui.route === it[0] ? ' aria-current="page"' : '') + '>' + ic(it[1]) + '<span>' + ROUTES[it[0]] + '</span></a>'; }).join('');
   var dark = document.documentElement.getAttribute('data-theme') === 'dark' || (!document.documentElement.getAttribute('data-theme') && window.matchMedia && matchMedia('(prefers-color-scheme: dark)').matches);
-  return '<div class="shell"><aside class="side" aria-label="Navegación"><div class="brand"><svg viewBox="0 0 32 32" aria-hidden="true"><rect width="32" height="32" rx="9" fill="var(--primary)"/><path d="M8 21l6-6 4 4 7-8" fill="none" stroke="var(--on-primary)" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/></svg>Financia</div>' +
+  return '<div class="shell"><aside class="side" aria-label="Navegación"><div class="brand" aria-label="Financia, tus finanzas personales"><svg viewBox="0 0 40 40" aria-hidden="true" focusable="false"><rect width="40" height="40" rx="12" fill="#123B35"/><path d="M9 28V21h5v7M18 28V15h5v13M27 28V10h5v18" fill="#55C99A"/><path d="M8 17l8-5 6 3 10-7" fill="none" stroke="#FFFFFF" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/></svg><span class="brand-name">Financia</span></div>' +
     '<nav class="nav">' + nav + '</nav><div class="side-foot"><button class="btn sm" data-act="theme">' + ic(dark ? 'sun' : 'moon') + (dark ? 'Modo claro' : 'Modo oscuro') + '</button><p class="hint">Tus datos se guardan solo en este navegador.</p></div></aside>' +
     '<main class="main"><div class="main-in" id="main"></div></main></div><nav class="bottomnav" aria-label="Navegación">' + items.map(function (it) { return '<a href="#' + it[0] + '" data-act="nav" data-route="' + it[0] + '"' + (ui.route === it[0] ? ' aria-current="page"' : '') + '>' + ic(it[1]) + '<span>' + ROUTES[it[0]] + '</span></a>'; }).join('') + '</nav>';
 }
