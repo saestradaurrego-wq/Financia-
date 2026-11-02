@@ -7,7 +7,7 @@
  * La dirección exacta debe confirmarse con un correo auténtico.
  */
 const FINANCIA_CONFIG = {
-  senderAddresses: [], // Ej.: 'avisos@dominio-confirmado.cl'; NUNCA adivinar
+  senderAddresses: ['enviodigital@bancochile.cl'], // Remitente reportado por la persona usuaria; autenticación aún por verificar
   lookbackDays: 7,
   maxThreads: 50
 };
@@ -24,7 +24,7 @@ function finRevisarAvisosSeguros() {
     console.log('Primero configura direcciones exactas de remitentes verificados. No se leyó ni envió contenido bancario.');
     return;
   }
-  const threads = GmailApp.search('newer_than:' + FINANCIA_CONFIG.lookbackDays + 'd', 0, FINANCIA_CONFIG.maxThreads);
+  const threads = GmailApp.search('from:enviodigital@bancochile.cl newer_than:' + FINANCIA_CONFIG.lookbackDays + 'd', 0, FINANCIA_CONFIG.maxThreads);
   let checked = 0, matched = 0;
   threads.forEach(thread => thread.getMessages().forEach(message => {
     checked++;
@@ -32,6 +32,7 @@ function finRevisarAvisosSeguros() {
     if (!allowed.includes(sender)) return;
     const subject = message.getSubject();
     if (!/compra|cargo|transacci[oó]n/i.test(subject)) return;
+    // Coincidencia de remitente no equivale a autenticación SPF/DKIM/DMARC.
     matched++;
     // Solo metadatos de conteo. No imprimir correos, montos ni cuerpos.
   }));
