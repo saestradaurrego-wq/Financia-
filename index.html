@@ -674,7 +674,7 @@ function blank() {
     version: 1,
     settings: { theme: null, openingBalance: 0, demoOpening: 0, monthlyIncome: 0, pcts: { needs: 50, wants: 30, savings: 20 }, showDemo: true, alerts: true, onboarded: false },
     categories: EXP_CATS.map(function (c) { return { name: c[0], type: 'expense', bucket: c[1] }; }).concat(INC_CATS.map(function (n) { return { name: n, type: 'income' }; })),
-    movements: [], budgets: {}, goals: [], debts: []
+    movements: [], pendingImports: [], merchantRules: {}, budgets: {}, goals: [], debts: []
   };
 }
 function sane(s) {
@@ -687,6 +687,8 @@ function load() {
   return blank();
 }
 var S = load();
+if (!Array.isArray(S.pendingImports)) S.pendingImports = [];
+if (!S.merchantRules || typeof S.merchantRules !== 'object') S.merchantRules = {};
 var cloudSaveTimer = null;
 function save() {
   try { localStorage.setItem(KEY, JSON.stringify(S)); } catch (e) { storageOK = false; }
@@ -699,6 +701,66 @@ function save() {
       });
     }, 700);
   }
+}
+
+
+/* Importaciones bancarias: los pendientes no afectan saldos ni presupuestos. */
+function bankMerchantKey(value) {
+  return String(value || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim().replace(/\s+/g, ' ');
+}
+function bankCategory(merchant) {
+  var key=bankMerchantKey(merchant), rules=S.merchantRules||{};
+  var allowed=cats('expense').map(function(c){return c.name;});
+  if(key && Object.prototype.hasOwnProperty.call(rules,key) && allowed.indexOf(rules[key])!==-1) return {category:rules[key],known:true};
+  var presets=[
+    [/\b(lider|jumbo|unimarc|santa isabel|tottus)\b/,'Alimentación'],
+    [/\b(copec|shell|petrobras|metro de santiago)\b/,'Transporte'],
+    [/\b(cruz verde|salcobrand|ahumada)\b/,'Salud'],
+    [/\b(cineplanet|cinemark)\b/,'Entretenimiento']
+  ].filter(function(r){return r[0].test(key) && allowed.indexOf(r[1])!==-1;});
+  return presets.length===1 ? {category:presets[0][1],known:true} : {category:'',known:false};
+}
+function bankImport(items) {
+  if(!Array.isArray(items)) throw Error('Se esperaba una lista de movimientos');
+  var added=0,registered=0;
+  items.forEach(function(item){
+    if(!item || item.source!=='gmail_banco_chile' || !item.externalId)return;
+    var id=String(item.externalId).slice(0,200),amount=Number(item.amount),date=String(item.date||'').slice(0,10);
+    if(!Number.isSafeInteger(amount)||amount<=0||amount>C.MAX_AMOUNT||!/^\d{4}-\d{2}-\d{2}$/.test(date)||isNaN(Date.parse(date)))return;
+    if(S.pendingImports.some(function(m){return m.externalId===id&&m.source===item.source})||S.movements.some(function(m){return m.externalId===id&&m.source===item.source}))return;
+    var merchant=String(item.merchant||'').slice(0,100),classification=bankCategory(merchant);
+    var record={externalId:id,source:item.source,merchant:merchant,amount:amount,date:date,desc:String(item.description||merchant||'Compra bancaria').slice(0,120),account:'Banco de Chile'};
+    if(classification.known && item.reviewRequired===false){
+      S.movements.push(Object.assign({id:uid(),type:'expense',category:classification.category,tags:[],recurring:false},record));registered++;
+    }else{S.pendingImports.push(record);added++;}
+  });
+  if(added||registered){save();render();}
+  return {pending:added,registered:registered};
+}
+// Integración local de la interfaz; NO es un endpoint público ni autoriza solicitudes externas.
+window.FINANCIA_IMPORT_BANK_MOVEMENTS=bankImport;
+function bankPendingHTML(){
+  var pending=S.pendingImports||[];
+  if(!pending.length)return '<section class="card"><h2>Compras por revisar</h2><p class="muted">No hay compras pendientes.</p></section>';
+  return '<section class="card"><h2>Compras por revisar ('+pending.length+')</h2><p class="muted small">No afectan el saldo ni los presupuestos hasta que confirmes.</p>'+
+    pending.map(function(m,i){return '<div class="mrow"><div><strong>'+esc(m.merchant||m.desc)+'</strong><p class="muted small">'+esc(m.date)+'</p></div><strong>'+C.fmtCLP(m.amount)+'</strong><div><button class="btn sm primary" data-act="bank-review" data-index="'+i+'">Clasificar</button> <button class="btn sm" data-act="bank-ignore" data-index="'+i+'">Descartar</button></div></div>';}).join('')+'</section>';
+}
+function bankReviewDialog(index){
+  var m=S.pendingImports[index];if(!m)return;
+  var suggested=bankCategory(m.merchant).category;
+  openDlg('<form data-form="bank-review" data-index="'+index+'">'+dh('Confirmar compra')+
+    '<p><strong>'+esc(m.merchant||m.desc)+'</strong> · '+C.fmtCLP(m.amount)+'</p>'+
+    fld('bank-category','Categoría','<select id="f-bank-category" name="category" required><option value="">Selecciona una categoría</option>'+
+    cats('expense').map(function(c){return '<option value="'+esc(c.name)+'"'+(c.name===suggested?' selected':'')+'>'+esc(c.name)+'</option>';}).join('')+'</select>')+
+    '<label class="chk"><input type="checkbox" name="remember" checked> Recordar esta categoría para este comercio</label>'+
+    '<div class="df"><button type="button" class="btn" data-act="close">Cancelar</button><button class="btn primary" type="submit">Confirmar y descontar</button></div></form>');
+}
+function bankReviewSubmit(form){
+  var index=Number(form.dataset.index),m=S.pendingImports[index],cat=String(new FormData(form).get('category')||'');
+  if(!m||!cats('expense').some(function(c){return c.name===cat})){toast('Selecciona una categoría válida');return;}
+  if(form.querySelector('[name=remember]').checked&&bankMerchantKey(m.merchant))S.merchantRules[bankMerchantKey(m.merchant)]=cat;
+  S.movements.push(Object.assign({id:uid(),type:'expense',category:cat,tags:[],recurring:false},m));
+  S.pendingImports.splice(index,1);save();closeDlg();render();toast('Compra registrada');
 }
 
 var ui = { route: 'resumen', month: C.monthKey(today()), f: { q: '', cat: '', type: '', from: '', to: '', limit: 50 }, cmp: null, base: null, extra: 0, strategy: 'avalanche', histOpen: {}, ob: null, pending: null, dup: null };
@@ -938,7 +1000,7 @@ function movListHTML() {
 }
 function viewMovs() {
   var f = ui.f, allCats = S.categories.map(function (c) { return c.name; }).filter(function (n, i, a) { return a.indexOf(n) === i; });
-  return topbar('Movimientos', 'Registra, busca y exporta tus ingresos y gastos', false, '<button class="btn" data-act="export-csv">' + ic('copy') + 'Exportar CSV</button><button class="btn pos" data-act="new-mov" data-type="income">' + ic('plus') + 'Ingreso</button><button class="btn primary" data-act="new-mov" data-type="expense">' + ic('minus') + 'Gasto</button>') + demoBanner() + storageBanner() +
+  return topbar('Movimientos', 'Registra, busca y exporta tus ingresos y gastos', false, '<button class="btn" data-act="export-csv">' + ic('copy') + 'Exportar CSV</button><button class="btn pos" data-act="new-mov" data-type="income">' + ic('plus') + 'Ingreso</button><button class="btn primary" data-act="new-mov" data-type="expense">' + ic('minus') + 'Gasto</button>') + demoBanner() + storageBanner() + bankPendingHTML() +
     '<section class="card"><div class="filters" role="search">' +
     '<div class="fld"><label for="flt-q">Buscar</label><input id="flt-q" type="search" data-filter="q" placeholder="Descripción, etiqueta…" value="' + esc(f.q) + '"></div>' +
     '<div class="fld"><label for="flt-type">Tipo</label><select id="flt-type" data-filter="type"><option value="">Todos</option><option value="income"' + (f.type === 'income' ? ' selected' : '') + '>Ingresos</option><option value="expense"' + (f.type === 'expense' ? ' selected' : '') + '>Gastos</option></select></div>' +
@@ -1103,7 +1165,7 @@ function submitMovement(form) {
   if (dup && ui.dup !== key) { ui.dup = key; form.querySelector('#f-dup-err').textContent = 'Ya existe un movimiento igual (misma fecha, monto, descripción y cuenta). Si es otro movimiento, vuelve a pulsar Guardar.'; form.querySelector('#f-save').textContent = 'Guardar de todos modos'; return; }
   if (newCat) S.categories.push(newCat);
   var old = S.movements.find(function (x) { return x.id === m.id; });
-  if (old) { m.demo = old.demo; S.movements[S.movements.indexOf(old)] = m; } else S.movements.push(m);
+  if (old) { m.demo = old.demo; if(old.source && old.externalId){m.source=old.source;m.externalId=old.externalId;m.merchant=old.merchant;} S.movements[S.movements.indexOf(old)] = m; } else S.movements.push(m);
   save(); closeDlg(); toast(old ? 'Movimiento actualizado' : (type === 'income' ? 'Ingreso registrado' : 'Gasto registrado')); render();
 }
 function goalDialog(id) {
@@ -1223,6 +1285,8 @@ var H = {
   },
   month: function (el) { ui.month = C.addMonths(ui.month, Number(el.dataset.d)); ui.cmp = null; ui.base = null; render(); },
   'new-mov': function (el) { movementDialog(null, el.dataset.type); },
+  'bank-review': function(el){bankReviewDialog(Number(el.dataset.index));},
+  'bank-ignore': function(el){var i=Number(el.dataset.index);if(!S.pendingImports[i])return;confirmDlg('Descartar compra','Esta compra pendiente no se contabilizará.','Descartar',function(){S.pendingImports.splice(i,1);save();closeDlg();render();});},
   'edit-mov': function (el) { movementDialog(el.dataset.id); },
   'del-mov': function (el) { var id = el.dataset.id, m = S.movements.find(function (x) { return x.id === id; }); confirmDlg('Eliminar movimiento', '¿Eliminar <b>' + esc(m.desc || m.category) + '</b> por ' + C.fmtCLP(m.amount) + '? Los saldos y gráficos se recalculan.', 'Eliminar', function () { S.movements = S.movements.filter(function (x) { return x.id !== id; }); save(); closeDlg(); toast('Movimiento eliminado'); render(); }); },
   'confirm-yes': function () { var f = ui.pending; if (f) f(); },
@@ -1275,7 +1339,7 @@ document.addEventListener('click', function (e) {
 });
 document.addEventListener('submit', function (e) {
   var form = e.target.closest('form[data-form]'); if (!form) return; e.preventDefault();
-  ({ movement: submitMovement, goal: submitGoal, contrib: submitContrib, debt: submitDebt, category: submitCategory })[form.dataset.form](form);
+  ({ movement: submitMovement, 'bank-review': bankReviewSubmit, goal: submitGoal, contrib: submitContrib, debt: submitDebt, category: submitCategory })[form.dataset.form](form);
 });
 function submitCategory(form) {
   var name = form.querySelector('#f-catname').value.trim(), type = form.querySelector('#f-cattype').value, err = form.querySelector('#f-catname-err');
