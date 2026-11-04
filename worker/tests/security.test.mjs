@@ -5,6 +5,7 @@ import { verifyFirebaseIdToken } from '../auth/firebase-id-token.js';
 import { listPendingMovements } from '../list-pending-movements.js';
 import { reviewBankMovement } from '../review-bank-movement.js';
 import { getEntitlements } from '../entitlements.js';
+import { createPendingMovement } from '../create-pending-movement.js';
 
 const {privateKey, publicKey} = generateKeyPairSync('rsa', {modulusLength:2048});
 const jwk = publicKey.export({format:'jwk'});
@@ -170,4 +171,44 @@ test('planes: premium activo habilita funciones premium', async () => {
   assert.equal(params[0],'usuario-A');
   assert.equal(data.plan,'premium');
   assert.equal(data.features.bankSync,true);
+});
+
+test('crear pendiente: sin token no toca D1', async () => {
+  let queried=false;
+  const res=await createPendingMovement(new Request('https://example.com/api/v2/movements/create',{
+    method:'POST',headers:{'Content-Type':'application/json'},body:'{}'
+  }),{DB:{prepare(){queried=true;}}});
+  assert.equal(res.status,401);
+  assert.equal(queried,false);
+});
+
+test('crear pendiente: identidad y cuenta se filtran en servidor', async () => {
+  let sql,params;
+  const env={DB:{prepare(q){sql=q;return {bind(...values){params=values;return {
+    async run(){return {meta:{changes:1}};}
+  };}};}}};
+  const res=await createPendingMovement(new Request('https://example.com/api/v2/movements/create',{
+    method:'POST',headers:{Authorization:'Bearer '+tokenFor('usuario-A'),'Content-Type':'application/json'},
+    body:JSON.stringify({accountId:'cuenta-A',transactionId:'manual-1',description:'Compra',
+      amountMinor:-1200,currencyCode:'CLP',bookedAt:'2026-11-04',owner_uid:'usuario-B',
+      source:'bank_api',status:'approved'})
+  }),env);
+  assert.equal(res.status,201);
+  assert.match(sql,/WHERE id=\? AND owner_uid=\? AND currency_code=\?/);
+  assert.equal(params[1],'manual');
+  assert.equal(params[7],'pending');
+  assert.deepEqual(params.slice(-3),['cuenta-A','usuario-A','CLP']);
+  assert.equal((await res.json()).status,'pending');
+});
+
+test('crear pendiente: sin coincidencia o duplicado devuelve conflicto', async () => {
+  const env={DB:{prepare(){return {bind(){return {async run(){
+    return {meta:{changes:0}};
+  }};}};}}};
+  const res=await createPendingMovement(new Request('https://example.com/api/v2/movements/create',{
+    method:'POST',headers:{Authorization:'Bearer '+tokenFor('usuario-A'),'Content-Type':'application/json'},
+    body:JSON.stringify({accountId:'cuenta-ajena',transactionId:'manual-1',description:'Compra',
+      amountMinor:-1200,currencyCode:'CLP',bookedAt:'2026-11-04'})
+  }),env);
+  assert.equal(res.status,409);
 });
