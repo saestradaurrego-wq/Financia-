@@ -6,6 +6,7 @@ import { listPendingMovements } from '../list-pending-movements.js';
 import { reviewBankMovement } from '../review-bank-movement.js';
 import { getEntitlements } from '../entitlements.js';
 import { createPendingMovement } from '../create-pending-movement.js';
+import { bankAccounts } from '../bank-accounts.js';
 
 const {privateKey, publicKey} = generateKeyPairSync('rsa', {modulusLength:2048});
 const jwk = publicKey.export({format:'jwk'});
@@ -211,4 +212,42 @@ test('crear pendiente: sin coincidencia o duplicado devuelve conflicto', async (
       amountMinor:-1200,currencyCode:'CLP',bookedAt:'2026-11-04'})
   }),env);
   assert.equal(res.status,409);
+});
+
+test('cuentas: acceso anonimo rechazado antes de D1',async()=>{
+  let touched=false;
+  const res=await bankAccounts(new Request('https://example.com/api/v2/accounts'),
+    {DB:{prepare(){touched=true;}}});
+  assert.equal(res.status,401);
+  assert.equal(touched,false);
+});
+
+test('cuentas: listado filtra uid verificado',async()=>{
+  let params,sql;
+  const env={DB:{prepare(q){sql=q;return {bind(...values){params=values;return {
+    async all(){return {results:[]};}
+  };}};}}};
+  const res=await bankAccounts(new Request('https://example.com/api/v2/accounts',{
+    headers:{Authorization:'Bearer '+tokenFor('usuario-A')}
+  }),env);
+  assert.equal(res.status,200);
+  assert.match(sql,/WHERE owner_uid = \?/);
+  assert.deepEqual(params,['usuario-A']);
+});
+
+test('cuentas: creacion ignora uid y banco falsificados',async()=>{
+  let params;
+  const env={DB:{prepare(){return {bind(...values){params=values;return {
+    async run(){return {meta:{changes:1}};}
+  };}};}}};
+  const res=await bankAccounts(new Request('https://example.com/api/v2/accounts',{
+    method:'POST',headers:{Authorization:'Bearer '+tokenFor('usuario-A'),
+      'Content-Type':'application/json'},
+    body:JSON.stringify({displayName:'Mi cuenta',countryCode:'CL',currencyCode:'CLP',
+      owner_uid:'usuario-B',bank_code:'banco-real',connection_status:'connected'})
+  }),env);
+  assert.equal(res.status,201);
+  assert.equal(params[1],'usuario-A');
+  assert.equal(params[3],'manual');
+  assert.equal((await res.json()).account.connection_status,'disconnected');
 });
