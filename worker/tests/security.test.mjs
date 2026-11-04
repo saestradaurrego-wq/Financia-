@@ -4,6 +4,7 @@ import { generateKeyPairSync, createSign } from 'node:crypto';
 import { verifyFirebaseIdToken } from '../auth/firebase-id-token.js';
 import { listPendingMovements } from '../list-pending-movements.js';
 import { reviewBankMovement } from '../review-bank-movement.js';
+import { getEntitlements } from '../entitlements.js';
 
 const {privateKey, publicKey} = generateKeyPairSync('rsa', {modulusLength:2048});
 const jwk = publicKey.export({format:'jwk'});
@@ -136,4 +137,37 @@ test('revision: una transicion sin filas modificadas devuelve 404', async () => 
     body:JSON.stringify({movementId:'mov-2',decision:'rejected'})
   }),env);
   assert.equal(response.status,404);
+});
+
+test('planes: usuario sin suscripcion es gratis', async () => {
+  const env={DB:{prepare(){return {bind(){return {async first(){return null;}};}};}}};
+  const res=await getEntitlements(new Request('https://example.com/api/v2/entitlements',{
+    headers:{Authorization:'Bearer '+tokenFor('usuario-A')}
+  }),env);
+  assert.equal(res.status,200);
+  const data=await res.json();
+  assert.equal(data.plan,'free');
+  assert.equal(data.features.bankSync,false);
+});
+
+test('planes: premium requiere suscripcion activa en servidor', async () => {
+  const env={DB:{prepare(){return {bind(){return {async first(){return {plan:'premium',billing_status:'past_due'};}};}};}}};
+  const res=await getEntitlements(new Request('https://example.com/api/v2/entitlements',{
+    headers:{Authorization:'Bearer '+tokenFor('usuario-A')}
+  }),env);
+  assert.equal((await res.json()).plan,'free');
+});
+
+test('planes: premium activo habilita funciones premium', async () => {
+  let params;
+  const env={DB:{prepare(){return {bind(...values){params=values;return {async first(){
+    return {plan:'premium',billing_status:'active'};
+  }};}};}}};
+  const res=await getEntitlements(new Request('https://example.com/api/v2/entitlements',{
+    headers:{Authorization:'Bearer '+tokenFor('usuario-A')}
+  }),env);
+  const data=await res.json();
+  assert.equal(params[0],'usuario-A');
+  assert.equal(data.plan,'premium');
+  assert.equal(data.features.bankSync,true);
 });
