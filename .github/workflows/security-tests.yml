@@ -24,3 +24,5 @@ jobs:
           node-version: '22'
       - name: Test Firebase token verification and user isolation
         run: node --experimental-default-type=module --test worker/tests/*.test.mjs
+      - name: Test D1 schema and cross-user integrity
+        run: python3 db/tests/test_schema.py
