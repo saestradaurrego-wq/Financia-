@@ -5,6 +5,7 @@ import { requireFirebaseUser } from './auth/firebase-id-token.js';
 import { reviewBankMovement } from './review-bank-movement.js';
 import { getEntitlements } from './entitlements.js';
 import { createPendingMovement } from './create-pending-movement.js';
+import { bankAccounts } from './bank-accounts.js';
 
 const json = (body, status=200) => Response.json(body,{
   status,headers:{'Cache-Control':'no-store'}
@@ -42,6 +43,8 @@ export default {
       response = await listPendingMovements(request,env);
     } else if (url.pathname === '/api/v2/movements/review') {
       response = await reviewBankMovement(request,env);
+    } else if (url.pathname === '/api/v2/accounts') {
+      response = await bankAccounts(request,env);
     } else if (url.pathname === '/api/v2/movements/create') {
       response = await createPendingMovement(request,env);
     } else if (url.pathname === '/api/v2/entitlements' && request.method === 'GET') {
