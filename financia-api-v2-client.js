@@ -3,7 +3,19 @@
 // El navegador nunca recibe el secreto del Worker ni tokens bancarios.
 (function () {
   'use strict';
-  const API_BASE = 'https://cold-surf-9305.sa-estradaurrego.workers.dev';
+  // No enviar tokens Firebase al Worker antiguo. Activar solo tras desplegar
+  // y verificar el endpoint v2 bajo un origen autorizado.
+  function apiBase() {
+    const configured = window.FINANCIA_API_V2_BASE_URL;
+    if (typeof configured !== 'string' || !configured) {
+      throw new Error('La API bancaria v2 todavía no está habilitada');
+    }
+    const url = new URL(configured, location.origin);
+    if (url.protocol !== 'https:' || url.username || url.password || url.search || url.hash) {
+      throw new Error('Configuración de API inválida');
+    }
+    return url.origin + url.pathname.replace(/\\/$/, '');
+  }
   async function currentToken() {
     if (!window.firebase || !firebase.auth) throw new Error('Firebase no disponible');
     const user = firebase.auth().currentUser;
@@ -12,7 +24,7 @@
   }
   async function api(path, options) {
     const token = await currentToken();
-    const response = await fetch(API_BASE + path, {
+    const response = await fetch(apiBase() + path, {
       method: options?.method || 'GET',
       headers: {
         'Authorization': 'Bearer ' + token,
