@@ -44,6 +44,8 @@
   window.FINANCIA_API_V2 = Object.freeze({
     listPending: () => api('/api/v2/movements/pending'),
     entitlements: () => api('/api/v2/entitlements'),
+    listAccounts: () => api('/api/v2/accounts'),
+    createAccount: (account) => api('/api/v2/accounts', {method:'POST',body:account}),
     createPending: (movement) => api('/api/v2/movements/create', {method:'POST',body:movement}),
     review: (movementId, decision) => api('/api/v2/movements/review', {
       method:'POST', body:{movementId,decision}
