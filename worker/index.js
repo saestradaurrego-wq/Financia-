@@ -3,6 +3,7 @@
 // La API bancaria anterior con secreto compartido NO se incorpora aqui.
 import { listPendingMovements } from './list-pending-movements.js';
 import { requireFirebaseUser } from './auth/firebase-id-token.js';
+import { reviewBankMovement } from './review-bank-movement.js';
 
 const noStore = {'Cache-Control':'no-store'};
 const json = (body, status=200) => Response.json(body,{status,headers:noStore});
@@ -15,6 +16,9 @@ export default {
     }
     if (url.pathname === '/api/v2/movements/pending') {
       return listPendingMovements(request, env);
+    }
+    if (url.pathname === '/api/v2/movements/review') {
+      return reviewBankMovement(request, env);
     }
     if (url.pathname === '/api/v2/session' && request.method === 'GET') {
       try {
