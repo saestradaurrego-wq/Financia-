@@ -3,6 +3,7 @@
 import { listPendingMovements } from './list-pending-movements.js';
 import { requireFirebaseUser } from './auth/firebase-id-token.js';
 import { reviewBankMovement } from './review-bank-movement.js';
+import { getEntitlements } from './entitlements.js';
 
 const json = (body, status=200) => Response.json(body,{
   status,headers:{'Cache-Control':'no-store'}
@@ -40,6 +41,8 @@ export default {
       response = await listPendingMovements(request,env);
     } else if (url.pathname === '/api/v2/movements/review') {
       response = await reviewBankMovement(request,env);
+    } else if (url.pathname === '/api/v2/entitlements' && request.method === 'GET') {
+      response = await getEntitlements(request,env);
     } else if (url.pathname === '/api/v2/session' && request.method === 'GET') {
       try {
         const uid = await requireFirebaseUser(request);
