@@ -1,0 +1,26 @@
+name: Financia security tests
+
+on:
+  push:
+    branches:
+      - feature/pwa-instalable
+  pull_request:
+    branches:
+      - main
+
+permissions:
+  contents: read
+
+jobs:
+  security-tests:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Test Firebase token verification and user isolation
+        run: node --experimental-default-type=module --test worker/tests/security.test.mjs
