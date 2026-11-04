@@ -70,3 +70,40 @@ except sqlite3.IntegrityError:
     pass
 
 print("OK: esquema D1 v2, aislamiento, duplicados, aprobaciones y suscripciones")
+
+# Ejercitar SQL de la API, no solo restricciones abstractas.
+insert_sql = (
+    "INSERT OR IGNORE INTO bank_movements_v2 "
+    "(id,owner_uid,bank_account_id,source,source_transaction_id,booked_at,"
+    "description,amount_minor,currency_code,status) "
+    "SELECT ?,owner_uid,id,?,?,?,?,?, ?,? FROM bank_accounts_v2 "
+    "WHERE id=? AND owner_uid=? AND currency_code=?"
+)
+def insert_manual(mid, account, owner, currency, transaction):
+    return db.execute(insert_sql, (mid, "manual", transaction, "2026-11-04",
+        "Movimiento manual", -1500, currency, "pending", account, owner, currency)).rowcount
+
+assert insert_manual("api-a", "cuenta-a", "usuario-a", "CLP", "api-txn-1") == 1
+assert insert_manual("api-intruso", "cuenta-b", "usuario-a", "USD", "api-txn-2") == 0
+assert insert_manual("api-moneda", "cuenta-a", "usuario-a", "USD", "api-txn-3") == 0
+assert insert_manual("api-duplicado", "cuenta-a", "usuario-a", "CLP", "api-txn-1") == 0
+
+pending_sql = (
+    "SELECT id, bank_account_id, source, booked_at, description, "
+    "amount_minor, currency_code, status FROM bank_movements_v2 "
+    "WHERE owner_uid = ? AND status = ? ORDER BY booked_at DESC LIMIT 100"
+)
+pending_a = db.execute(pending_sql, ("usuario-a", "pending")).fetchall()
+pending_b = db.execute(pending_sql, ("usuario-b", "pending")).fetchall()
+assert any(row[0] == "api-a" for row in pending_a)
+assert all(row[0] != "mov-b" for row in pending_a)
+assert all(row[0] != "api-a" for row in pending_b)
+assert any(row[0] == "mov-b" for row in pending_b)
+
+account_sql = (
+    "SELECT id,display_name,country_code,bank_code,currency_code,connection_status "
+    "FROM bank_accounts_v2 WHERE owner_uid = ? ORDER BY created_at DESC LIMIT 100"
+)
+assert [row[0] for row in db.execute(account_sql, ("usuario-a",))] == ["cuenta-a"]
+assert [row[0] for row in db.execute(account_sql, ("usuario-b",))] == ["cuenta-b"]
+print("OK: SQL de insercion y listados reales aislados por usuario")
