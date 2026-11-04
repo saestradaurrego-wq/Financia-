@@ -1,0 +1,12 @@
+{
+  "id": "/",
+  "name": "Financia — Finanzas personales",
+  "short_name": "Financia",
+  "description": "Organiza tus finanzas personales.",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "background_color": "#F3F6FA",
+  "theme_color": "#0F2A55",
+  "lang": "es"
+}
