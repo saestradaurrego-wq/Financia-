@@ -14,7 +14,7 @@
     if (url.protocol !== 'https:' || url.username || url.password || url.search || url.hash) {
       throw new Error('Configuración de API inválida');
     }
-    return url.origin + url.pathname.replace(/\\/$/, '');
+    return url.origin + url.pathname.replace(/\/$/, '');
   }
   async function currentToken() {
     if (!window.firebase || !firebase.auth) throw new Error('Firebase no disponible');
@@ -43,6 +43,8 @@
   // API v2 todavía NO desplegada: no se llama hasta activación explícita.
   window.FINANCIA_API_V2 = Object.freeze({
     listPending: () => api('/api/v2/movements/pending'),
+    entitlements: () => api('/api/v2/entitlements'),
+    createPending: (movement) => api('/api/v2/movements/create', {method:'POST',body:movement}),
     review: (movementId, decision) => api('/api/v2/movements/review', {
       method:'POST', body:{movementId,decision}
     })
