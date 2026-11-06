@@ -14,7 +14,12 @@
     if (url.protocol !== 'https:' || url.username || url.password || url.search || url.hash) {
       throw new Error('Configuración de API inválida');
     }
-    return url.origin + url.pathname.replace(/\/$/, '');
+    // No enviar tokens Firebase a un servidor arbitrario por configuración errónea.
+    if (!/^financia-api-v2-staging\.[a-z0-9-]+\.workers\.dev$/i.test(url.hostname) ||
+        (url.port && url.port !== '443') || url.pathname !== '/') {
+      throw new Error('La API v2 debe apuntar al Worker staging autorizado');
+    }
+    return url.origin;
   }
   async function currentToken() {
     if (!window.firebase || !firebase.auth) throw new Error('Firebase no disponible');
