@@ -54,3 +54,30 @@ test('API v2: respuesta publica permite solo origen configurado', async () => {
   assert.equal(res.headers.get('Access-Control-Allow-Origin'),origin);
   assert.equal(res.headers.get('Cache-Control'),'no-store');
 });
+
+test('API v2: una falla inesperada devuelve error genérico sin filtrar datos internos', async () => {
+  const original = globalThis.fetch;
+  try {
+    // La ruta de sesión puede provocar una excepción en la verificación JWT;
+    // el manejador general debe responder de forma controlada.
+    const res = await api.fetch(new Request('https://example.com/api/v2/session',{
+      headers:{Authorization:'Bearer malformed.token.value'}
+    }),{});
+    assert.equal(res.status,401);
+    assert.equal(res.headers.get('Cache-Control'),'no-store');
+    const body=await res.json();
+    assert.equal(body.ok,false);
+    assert.doesNotMatch(JSON.stringify(body), /stack|sqlite|database_id|private_key/i);
+  } finally {
+    globalThis.fetch=original;
+  }
+});
+
+test('API v2: no expone cabeceras CORS ante un origen no autorizado', async () => {
+  const res=await api.fetch(new Request('https://api.example.com/api/v2/session',{
+    headers:{Origin:'https://sitio-malicioso.example'}
+  }),{FINANCIA_ALLOWED_ORIGIN:'https://financia.sa-estradaurrego.workers.dev'});
+  assert.equal(res.status,403);
+  assert.equal(res.headers.get('Access-Control-Allow-Origin'),null);
+  assert.equal(res.headers.get('Cache-Control'),'no-store');
+});
