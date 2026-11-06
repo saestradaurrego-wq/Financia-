@@ -25,11 +25,15 @@ export async function createPendingMovement(request,env) {
   // Solo carga manual por ahora. La importacion bancaria no debe aceptar
   // movimientos declarados como bank_api/bank_email por el navegador.
   const {accountId,transactionId,description,amountMinor,currencyCode,bookedAt}=body||{};
+  // Rechazar fechas inexistentes (p. ej. 2026-02-30) y formatos ambiguos.
+  const validDate = typeof bookedAt === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(bookedAt) &&
+    !Number.isNaN(Date.parse(bookedAt)) &&
+    new Date(bookedAt).toISOString().slice(0,10) === bookedAt;
   if(![accountId,transactionId,description,currencyCode,bookedAt].every(
     x=>typeof x==='string'&&x.length>0&&x.length<=200)||
     !Number.isSafeInteger(amountMinor)||amountMinor===0||
     !/^[A-Z]{3}$/.test(currencyCode)||
-    !/^\d{4}-\d{2}-\d{2}$/.test(bookedAt)) {
+    !validDate) {
     return json({ok:false,error:'Datos invalidos'},400);
   }
   const id=crypto.randomUUID();
