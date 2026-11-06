@@ -15,7 +15,7 @@ test('Gmail: rechaza secreto incorrecto sin acceder a D1',async()=>{
   assert.equal(r.status,401);
 });
 test('Gmail: rechaza fechas inexistentes antes de D1',async()=>{
-  const r=await importGmailPurchases(req({purchases:[{...purchase,bookedAt:'2026-02-30'}]}),env);
+  const r=await importGmailPurchases(req({purchases:[{...purchase,bookedAt:'2026-02-30'}]}),{...env,DB:{prepare(){throw Error('No debería consultar D1');}}});
   assert.equal(r.status,400);
 });
 test('Gmail: requiere configuración de integración',async()=>{
