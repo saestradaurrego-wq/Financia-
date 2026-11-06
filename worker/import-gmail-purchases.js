@@ -42,6 +42,11 @@ export async function importGmailPurchases(request,env) {
   }
   let saved=0,duplicates=0;
   try {
+    // No confundir cuenta inexistente con un duplicado: fallar antes de escribir.
+    const account=await env.DB.prepare(
+      'SELECT id FROM bank_accounts_v2 WHERE id=? AND owner_uid=? AND currency_code=?'
+    ).bind(env.FINANCIA_GMAIL_ACCOUNT_ID,env.FINANCIA_GMAIL_OWNER_UID,'CLP').first();
+    if(!account) return json({ok:false,error:'Cuenta de importacion no disponible'},503);
     for(const p of purchases) {
       const result=await env.DB.prepare(
         'INSERT OR IGNORE INTO bank_movements_v2 '+
