@@ -1,0 +1,39 @@
+name: Verify Financia Google Cloud identity
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  id-token: write
+
+jobs:
+  verify-identity:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Validate configured variables
+        env:
+          PROVIDER: ${{ vars.GCP_WORKLOAD_IDENTITY_PROVIDER }}
+          SERVICE_ACCOUNT: ${{ vars.GCP_SERVICE_ACCOUNT }}
+        run: |
+          test -n "$PROVIDER" || { echo "::error::Missing GCP_WORKLOAD_IDENTITY_PROVIDER"; exit 1; }
+          test -n "$SERVICE_ACCOUNT" || { echo "::error::Missing GCP_SERVICE_ACCOUNT"; exit 1; }
+          case "$PROVIDER" in
+            projects/434454991701/locations/global/workloadIdentityPools/financia-github/providers/*) ;;
+            *) echo "::error::Unexpected identity provider path"; exit 1 ;;
+          esac
+          test "$SERVICE_ACCOUNT" = "financia-github-ci@financia-57085.iam.gserviceaccount.com" || { echo "::error::Unexpected service account"; exit 1; }
+      - name: Authenticate with Google Cloud using OIDC
+        id: auth
+        uses: google-github-actions/auth@v2
+        with:
+          workload_identity_provider: ${{ vars.GCP_WORKLOAD_IDENTITY_PROVIDER }}
+          service_account: ${{ vars.GCP_SERVICE_ACCOUNT }}
+          token_format: access_token
+          create_credentials_file: false
+          export_environment_variables: false
+      - name: Confirm authentication
+        run: |
+          test -n "${{ steps.auth.outputs.access_token }}" || { echo "::error::No access token returned"; exit 1; }
+          echo "GitHub OIDC authentication to Financia Google Cloud succeeded."
