@@ -2,6 +2,11 @@
 <title>Financia | Finanzas personales</title>
 <meta name="description" content="Organiza tus ingresos, gastos, presupuestos, metas de ahorro y deudas con Financia.">
 <meta name="theme-color" content="#0F2A55">
+<link rel="manifest" href="/manifest.webmanifest">
+<link rel="icon" href="/icon.svg" type="image/svg+xml">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<meta name="apple-mobile-web-app-title" content="Financia">
 <meta name="claude:viewport-fit-sides" content="cover">
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,500;12..96,700&family=Figtree:wght@400;500;600;700&display=swap">
 <style>
@@ -1312,4 +1317,7 @@ window.addEventListener('hashchange', function () { var h = (location.hash || ''
 })();
 </script>
 
+<script defer src="/financia-api-v2-client.js"></script>
+<script defer src="/financia-review-panel.js"></script>
+<script>if ("serviceWorker" in navigator) { window.addEventListener("load", function () { navigator.serviceWorker.register("/sw.js").catch(function () {}); }); }</script>
 </body></html>
