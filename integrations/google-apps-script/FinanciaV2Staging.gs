@@ -26,19 +26,23 @@ function financiaV2EnviarComprasDePrueba(compras) {
         c.currencyCode !== 'CLP' || !/^\d{4}-\d{2}-\d{2}$/.test(c.bookedAt)) {
       throw new Error('Compra inválida: revisar ID, comercio, monto CLP y fecha.');
     }
+    var parsedDate = new Date(c.bookedAt);
     if (c.transactionId.length > 200 || c.description.length > 200 ||
-        c.amountMinor >= 0 ||
-        new Date(c.bookedAt).toISOString().slice(0, 10) !== c.bookedAt) {
+        c.amountMinor >= 0 || Number.isNaN(parsedDate.getTime()) ||
+        parsedDate.toISOString().slice(0, 10) !== c.bookedAt) {
       throw new Error('Compra inválida: fecha, monto o longitud incorrectos.');
     }
     if (ids[c.transactionId]) throw new Error('ID repetido dentro del lote.');
     ids[c.transactionId] = true;
   });
+  // Evitar solicitudes que el Worker rechazaría por exceder su límite de 16 KB.
+  var payload = JSON.stringify({purchases: compras});
+  if (payload.length > 16384) throw new Error('Lote demasiado grande para la API v2.');
   var response = UrlFetchApp.fetch(base + '/api/v2/import/gmail', {
     method: 'post',
     contentType: 'application/json',
     headers: {'X-Financia-Import-Secret': secret},
-    payload: JSON.stringify({purchases: compras}),
+    payload: payload,
     muteHttpExceptions: true,
     followRedirects: false
   });
