@@ -262,3 +262,28 @@ test('crear pendiente: rechaza fecha inexistente antes de escribir en D1', async
   assert.equal(res.status,400);
   assert.equal(touched,false);
 });
+
+test('crear pendiente: acepta fecha real de año bisiesto', async () => {
+  let params;
+  const env={DB:{prepare(){return {bind(...values){params=values;return {
+    async run(){return {meta:{changes:1}};}
+  };}};}}};
+  const res=await createPendingMovement(new Request('https://example.com/api/v2/movements/create',{
+    method:'POST',headers:{Authorization:'Bearer '+tokenFor('usuario-A'),'Content-Type':'application/json'},
+    body:JSON.stringify({accountId:'cuenta-A',transactionId:'manual-bisiesto',
+      description:'Compra',amountMinor:-1200,currencyCode:'CLP',bookedAt:'2028-02-29'})
+  }),env);
+  assert.equal(res.status,201);
+  assert.equal(params[3],'2028-02-29');
+});
+
+test('crear pendiente: rechaza fecha no bisiesta', async () => {
+  let touched=false;
+  const res=await createPendingMovement(new Request('https://example.com/api/v2/movements/create',{
+    method:'POST',headers:{Authorization:'Bearer '+tokenFor('usuario-A'),'Content-Type':'application/json'},
+    body:JSON.stringify({accountId:'cuenta-A',transactionId:'manual-no-bisiesto',
+      description:'Compra',amountMinor:-1200,currencyCode:'CLP',bookedAt:'2027-02-29'})
+  }),{DB:{prepare(){touched=true;throw Error('No debe tocar D1');}}});
+  assert.equal(res.status,400);
+  assert.equal(touched,false);
+});
