@@ -116,3 +116,45 @@ with wrangler.open('rb') as config_file:
 assert config['name'] == 'financia-api-v2-staging'
 assert config['main'] == 'index.js'
 print('OK: configuración Wrangler staging válida')
+
+
+# Probar el SQL exacto del puente Gmail contra SQLite/D1, con aislamiento y deduplicacion.
+gmail_sql = (
+    "INSERT OR IGNORE INTO bank_movements_v2 "
+    "(id,owner_uid,bank_account_id,source,source_transaction_id,booked_at,"
+    "description,amount_minor,currency_code,status) "
+    "SELECT ?,owner_uid,id,?,?,?,?,?,?,? FROM bank_accounts_v2 "
+    "WHERE id=? AND owner_uid=? AND currency_code=?"
+)
+def insert_gmail(mid, account, owner, currency, transaction):
+    return db.execute(gmail_sql, (
+        mid, "bank_email", transaction, "2026-11-06",
+        "Comercio Gmail", -12500, "CLP", "pending", account, owner, currency
+    )).rowcount
+
+assert insert_gmail("gmail-a1", "cuenta-a", "usuario-a", "CLP", "gmail-txn-1") == 1
+assert insert_gmail("gmail-a2", "cuenta-a", "usuario-a", "CLP", "gmail-txn-1") == 0
+assert insert_gmail("gmail-otro", "cuenta-b", "usuario-a", "CLP", "gmail-txn-2") == 0
+assert insert_gmail("gmail-moneda", "cuenta-b", "usuario-b", "USD", "gmail-txn-3") == 0
+assert insert_gmail("gmail-sin-cuenta", "no-existe", "usuario-a", "CLP", "gmail-txn-4") == 0
+row = db.execute(
+    "SELECT owner_uid,source,status,amount_minor FROM bank_movements_v2 WHERE id=?",
+    ("gmail-a1",)
+).fetchone()
+assert row == ("usuario-a", "bank_email", "pending", -12500)
+assert db.execute(
+    "SELECT COUNT(*) FROM bank_movements_v2 WHERE source='bank_email'"
+).fetchone()[0] == 1
+
+# La aprobación de Gmail es una transición de estado única y exclusiva del dueño.
+approve_sql = (
+    "UPDATE bank_movements_v2 SET status = ?, updated_at = CURRENT_TIMESTAMP "
+    "WHERE id = ? AND owner_uid = ? AND status = ?"
+)
+assert db.execute(approve_sql, ("approved", "gmail-a1", "usuario-b", "pending")).rowcount == 0
+assert db.execute(approve_sql, ("approved", "gmail-a1", "usuario-a", "pending")).rowcount == 1
+assert db.execute(approve_sql, ("rejected", "gmail-a1", "usuario-a", "pending")).rowcount == 0
+assert db.execute(
+    "SELECT status FROM bank_movements_v2 WHERE id='gmail-a1'"
+).fetchone()[0] == "approved"
+print("OK: Gmail SQL real, deduplicación, aislamiento y aprobación única")
