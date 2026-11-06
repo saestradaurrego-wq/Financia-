@@ -9,7 +9,7 @@ let url;
 try { url = new URL(base); }
 catch { console.error('URL de staging inválida'); process.exit(2); }
 if (url.protocol !== 'https:' || url.username || url.password ||
-    url.search || url.hash || !url.hostname.startsWith('financia-api-v2-staging.')) {
+    url.search || url.hash || !/^financia-api-v2-staging\.[a-z0-9-]+\.workers\.dev$/i.test(url.hostname)) {
   console.error('Solo se permite el dominio HTTPS del Worker staging.');
   process.exit(2);
 }
@@ -31,6 +31,16 @@ try {
   await check('/api/v2/ready',200,b=>b.ok===true && b.ready===true);
   await check('/api/v2/session',401,b=>b.ok===false);
   await check('/api/v2/movements/pending',401,b=>b.ok===false);
+  await check('/api/v2/import/gmail',405,b=>b.ok===false);
+  // No se envían compras: únicamente comprobamos que un POST sin secreto sea rechazado.
+  const denied=await fetch(new URL('/api/v2/import/gmail',url),{
+    method:'POST',headers:{'Content-Type':'application/json'},
+    body:JSON.stringify({purchases:[]}),redirect:'error',signal:AbortSignal.timeout(10000)
+  });
+  if(denied.status!==401 || (await denied.json()).ok!==false){
+    throw new Error('Importador Gmail accesible sin secreto');
+  }
+  console.log('OK importador Gmail protegido',denied.status);
   console.log('Staging responde y D1 está preparada. Falta validar flujo autenticado.');
 } catch (error) {
   console.error('Staging NO está listo:',error.message);
