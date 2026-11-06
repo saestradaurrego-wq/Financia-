@@ -46,6 +46,19 @@ export default {
     response = await safeRoute(async () => {
     if (url.pathname === '/api/v2/health' && request.method === 'GET') {
       response = json({ok:true,service:'financia-api-v2'});
+    } else if (url.pathname === '/api/v2/ready' && request.method === 'GET') {
+      // Preparación real: no declarar lista la API si falta D1 o su esquema.
+      if (!env.DB) {
+        response = json({ok:false,ready:false,error:'Base de datos no configurada'},503);
+      } else {
+        try {
+          await env.DB.prepare('SELECT id FROM bank_accounts_v2 LIMIT 1').first();
+          await env.DB.prepare('SELECT id FROM bank_movements_v2 LIMIT 1').first();
+          response = json({ok:true,ready:true});
+        } catch {
+          response = json({ok:false,ready:false,error:'Base de datos no preparada'},503);
+        }
+      }
     } else if (url.pathname === '/api/v2/movements/pending') {
       response = await listPendingMovements(request,env);
     } else if (url.pathname === '/api/v2/movements/review') {
