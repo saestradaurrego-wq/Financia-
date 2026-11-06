@@ -158,3 +158,27 @@ assert db.execute(
     "SELECT status FROM bank_movements_v2 WHERE id='gmail-a1'"
 ).fetchone()[0] == "approved"
 print("OK: Gmail SQL real, deduplicación, aislamiento y aprobación única")
+
+
+# Un reenvío de Gmail después de aprobar una compra no debe reabrirla.
+assert insert_gmail("gmail-reenvio", "cuenta-a", "usuario-a", "CLP", "gmail-txn-1") == 0
+assert db.execute(
+    "SELECT status FROM bank_movements_v2 WHERE id='gmail-a1'"
+).fetchone()[0] == "approved"
+
+# Dos compras distintas del mismo correo deben conservar sus propios IDs.
+assert insert_gmail("gmail-distinto", "cuenta-a", "usuario-a", "CLP", "gmail-txn-5") == 1
+assert db.execute(
+    "SELECT COUNT(*) FROM bank_movements_v2 WHERE owner_uid=? AND source=?",
+    ("usuario-a", "bank_email")
+).fetchone()[0] == 2
+
+# Un correo con ID duplicado no cambia descripción, monto ni fecha de la compra original.
+original = db.execute(
+    "SELECT description,amount_minor,booked_at,status FROM bank_movements_v2 WHERE id='gmail-a1'"
+).fetchone()
+assert insert_gmail("gmail-intento-modificar", "cuenta-a", "usuario-a", "CLP", "gmail-txn-1") == 0
+assert db.execute(
+    "SELECT description,amount_minor,booked_at,status FROM bank_movements_v2 WHERE id='gmail-a1'"
+).fetchone() == original
+print("OK: reenvíos Gmail idempotentes y movimientos aprobados inmutables")
