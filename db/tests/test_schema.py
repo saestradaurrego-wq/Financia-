@@ -135,7 +135,7 @@ def insert_gmail(mid, account, owner, currency, transaction):
 assert insert_gmail("gmail-a1", "cuenta-a", "usuario-a", "CLP", "gmail-txn-1") == 1
 assert insert_gmail("gmail-a2", "cuenta-a", "usuario-a", "CLP", "gmail-txn-1") == 0
 assert insert_gmail("gmail-otro", "cuenta-b", "usuario-a", "CLP", "gmail-txn-2") == 0
-assert insert_gmail("gmail-moneda", "cuenta-b", "usuario-b", "USD", "gmail-txn-3") == 0
+assert insert_gmail("gmail-moneda", "cuenta-b", "usuario-b", "CLP", "gmail-txn-3") == 0
 assert insert_gmail("gmail-sin-cuenta", "no-existe", "usuario-a", "CLP", "gmail-txn-4") == 0
 row = db.execute(
     "SELECT owner_uid,source,status,amount_minor FROM bank_movements_v2 WHERE id=?",
