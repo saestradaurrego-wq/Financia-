@@ -1,0 +1,31 @@
+name: Verify Google Cloud OIDC (manual)
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  verify-identity:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - name: Check required GitHub variables
+        env:
+          PROVIDER: ${{ vars.GCP_WORKLOAD_IDENTITY_PROVIDER }}
+          SERVICE_ACCOUNT: ${{ vars.GCP_SERVICE_ACCOUNT }}
+        run: |
+          test -n "$PROVIDER" || { echo "::error::Falta variable GCP_WORKLOAD_IDENTITY_PROVIDER"; exit 1; }
+          test -n "$SERVICE_ACCOUNT" || { echo "::error::Falta variable GCP_SERVICE_ACCOUNT"; exit 1; }
+      - name: Exchange GitHub OIDC for temporary Google credentials
+        uses: google-github-actions/auth@v2
+        with:
+          workload_identity_provider: ${{ vars.GCP_WORKLOAD_IDENTITY_PROVIDER }}
+          service_account: ${{ vars.GCP_SERVICE_ACCOUNT }}
+          token_format: access_token
+      - name: Confirm authentication without printing credentials
+        run: echo "Google Cloud OIDC authentication succeeded. No resources changed."
