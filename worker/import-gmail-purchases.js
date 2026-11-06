@@ -40,26 +40,28 @@ export async function importGmailPurchases(request,env) {
       return json({ok:false,error:'Datos invalidos'},400);
     }
   }
-  let saved=0,duplicates=0;
   try {
-    // No confundir cuenta inexistente con un duplicado: fallar antes de escribir.
     const account=await env.DB.prepare(
       'SELECT id FROM bank_accounts_v2 WHERE id=? AND owner_uid=? AND currency_code=?'
     ).bind(env.FINANCIA_GMAIL_ACCOUNT_ID,env.FINANCIA_GMAIL_OWNER_UID,'CLP').first();
     if(!account) return json({ok:false,error:'Cuenta de importacion no disponible'},503);
-    for(const p of purchases) {
-      const result=await env.DB.prepare(
-        'INSERT OR IGNORE INTO bank_movements_v2 '+
-        '(id,owner_uid,bank_account_id,source,source_transaction_id,booked_at,'+
-        'description,amount_minor,currency_code,status) '+
-        'SELECT ?,owner_uid,id,?,?,?,?,?,?,? FROM bank_accounts_v2 '+
-        'WHERE id=? AND owner_uid=? AND currency_code=?'
-      ).bind(crypto.randomUUID(),'bank_email',p.transactionId,p.bookedAt,
-        p.description.trim(),p.amountMinor,'CLP','pending',
-        env.FINANCIA_GMAIL_ACCOUNT_ID,env.FINANCIA_GMAIL_OWNER_UID,'CLP').run();
-      if(result?.meta?.changes===1) saved++;
-      else duplicates++;
+    // D1 batch ejecuta el lote como transacción: si una escritura falla,
+    // no deja un subconjunto de compras importadas.
+    const statements=purchases.map(p=>env.DB.prepare(
+      'INSERT OR IGNORE INTO bank_movements_v2 '+
+      '(id,owner_uid,bank_account_id,source,source_transaction_id,booked_at,'+
+      'description,amount_minor,currency_code,status) '+
+      'SELECT ?,owner_uid,id,?,?,?,?,?,?,? FROM bank_accounts_v2 '+
+      'WHERE id=? AND owner_uid=? AND currency_code=?'
+    ).bind(crypto.randomUUID(),'bank_email',p.transactionId,p.bookedAt,
+      p.description.trim(),p.amountMinor,'CLP','pending',
+      env.FINANCIA_GMAIL_ACCOUNT_ID,env.FINANCIA_GMAIL_OWNER_UID,'CLP'));
+    const results=await env.DB.batch(statements);
+    if(!Array.isArray(results)||results.length!==purchases.length) {
+      throw new Error('Resultado incompleto de D1');
     }
+    const saved=results.filter(r=>r?.meta?.changes===1).length;
+    const duplicates=purchases.length-saved;
     return json({ok:true,saved,duplicates,status:'pending'});
   } catch {
     return json({ok:false,error:'No se pudieron importar las compras'},500);
