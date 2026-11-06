@@ -42,6 +42,16 @@
   }
   // API v2 todavía NO desplegada: no se llama hasta activación explícita.
   window.FINANCIA_API_V2 = Object.freeze({
+    readiness: async () => {
+      const response = await fetch(apiBase() + '/api/v2/ready', {
+        method:'GET',cache:'no-store',credentials:'omit'
+      });
+      const data = await response.json().catch(() => null);
+      if (!response.ok || !data?.ready) {
+        throw new Error('La API bancaria todavía no está preparada. No se enviaron datos.');
+      }
+      return data;
+    },
     listPending: () => api('/api/v2/movements/pending'),
     entitlements: () => api('/api/v2/entitlements'),
     listAccounts: () => api('/api/v2/accounts'),
