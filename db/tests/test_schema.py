@@ -107,3 +107,12 @@ account_sql = (
 assert [row[0] for row in db.execute(account_sql, ("usuario-a",))] == ["cuenta-a"]
 assert [row[0] for row in db.execute(account_sql, ("usuario-b",))] == ["cuenta-b"]
 print("OK: SQL de insercion y listados reales aislados por usuario")
+
+# La configuración de despliegue debe ser TOML válido.
+import tomllib
+wrangler = Path(__file__).resolve().parents[2] / 'worker' / 'wrangler.toml'
+with wrangler.open('rb') as config_file:
+    config = tomllib.load(config_file)
+assert config['name'] == 'financia-api-v2-staging'
+assert config['main'] == 'index.js'
+print('OK: configuración Wrangler staging válida')
