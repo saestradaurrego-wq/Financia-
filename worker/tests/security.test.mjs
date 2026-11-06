@@ -251,3 +251,14 @@ test('cuentas: creacion ignora uid y banco falsificados',async()=>{
   assert.equal(params[3],'manual');
   assert.equal((await res.json()).account.connection_status,'disconnected');
 });
+
+test('crear pendiente: rechaza fecha inexistente antes de escribir en D1', async () => {
+  let touched=false;
+  const res=await createPendingMovement(new Request('https://example.com/api/v2/movements/create',{
+    method:'POST',headers:{Authorization:'Bearer '+tokenFor('usuario-A'),'Content-Type':'application/json'},
+    body:JSON.stringify({accountId:'cuenta-A',transactionId:'manual-fecha',
+      description:'Compra',amountMinor:-1200,currencyCode:'CLP',bookedAt:'2026-02-30'})
+  }),{DB:{prepare(){touched=true;throw Error('No debe tocar D1');}}});
+  assert.equal(res.status,400);
+  assert.equal(touched,false);
+});
