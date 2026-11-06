@@ -64,7 +64,7 @@ test('Apps Script: bloquea IDs repetidos antes de enviar',()=>{
   assert.throws(()=>b.send([valid,valid]),/repetido/);
   assert.equal(b.calls.length,0);
 });
-test('Apps Script: bloquea lotes excesivos antes de enviar',()=>{
+test('Apps Script: acepta lote máximo de 20 compras válidas',()=>{
   const b=bridge();
   const items=Array.from({length:20},(_,i)=>({
     ...valid,transactionId:'gmail-test-'+i,
