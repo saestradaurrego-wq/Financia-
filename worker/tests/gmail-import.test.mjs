@@ -24,8 +24,9 @@ test('Gmail: requiere configuración de integración',async()=>{
 });
 test('Gmail: importa pendiente con usuario y cuenta fijados en servidor',async()=>{
   let sql='',bindings=[];
-  const db={prepare(q){sql=q;return {bind(...args){bindings=args;return {
-    async run(){return {meta:{changes:1}};}
+  const db={prepare(q){return {bind(...args){return {
+    async first(){return {id:'account1'};},
+    async run(){sql=q;bindings=args;return {meta:{changes:1}};}
   };}};}};
   const r=await importGmailPurchases(req({purchases:[purchase]}),{...env,DB:db});
   assert.equal(r.status,200);
@@ -37,7 +38,21 @@ test('Gmail: importa pendiente con usuario y cuenta fijados en servidor',async()
   assert.equal(bindings[7],'pending');
 });
 test('Gmail: duplicados no se contabilizan como nuevos',async()=>{
-  const db={prepare(){return {bind(){return {async run(){return {meta:{changes:0}};}};}};}};
+  const db={prepare(){return {bind(){return {
+    async first(){return {id:'account1'};},
+    async run(){return {meta:{changes:0}};}
+  };}};}};
   const r=await importGmailPurchases(req({purchases:[purchase]}),{...env,DB:db});
   assert.deepEqual(await r.json(),{ok:true,saved:0,duplicates:1,status:'pending'});
+});
+
+test('Gmail: cuenta inexistente devuelve 503 sin insertar',async()=>{
+  let writes=0;
+  const db={prepare(){return {bind(){return {
+    async first(){return null;},
+    async run(){writes++;return {meta:{changes:1}};}
+  };}};}};
+  const r=await importGmailPurchases(req({purchases:[purchase]}),{...env,DB:db});
+  assert.equal(r.status,503);
+  assert.equal(writes,0);
 });
