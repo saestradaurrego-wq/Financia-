@@ -68,3 +68,16 @@ test('Gmail: error de lote no informa éxito parcial',async()=>{
   assert.equal(r.status,500);
   assert.equal((await r.json()).ok,false);
 });
+
+test('Gmail: rechaza montos positivos antes de D1',async()=>{
+  const r=await importGmailPurchases(req({purchases:[{...purchase,amountMinor:12500}]}),{
+    ...env,DB:{prepare(){throw Error('No debe tocar D1');}}
+  });
+  assert.equal(r.status,400);
+});
+test('Gmail: rechaza IDs repetidos dentro del mismo lote',async()=>{
+  const r=await importGmailPurchases(req({purchases:[purchase,purchase]}),{
+    ...env,DB:{prepare(){throw Error('No debe tocar D1');}}
+  });
+  assert.equal(r.status,400);
+});
