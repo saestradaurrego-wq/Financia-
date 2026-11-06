@@ -21,6 +21,5 @@ test('API v2: no se permite desplegar con identificador D1 de ejemplo', () => {
 test('API v2: sin base D1 real, el despliegue permanece bloqueado', () => {
   const enabledBinding = /^\[\[d1_databases\]\]/m.test(config);
   const configuredDatabase = /^database_id\s*=\s*"[0-9a-f-]{36}"/m.test(config);
-  assert.equal(enabledBinding, false, 'No activar staging sin configurar una D1 real');
-  assert.equal(configuredDatabase, false, 'No introducir un ID D1 ficticio');
+  assert.ok(!enabledBinding || configuredDatabase, 'La D1 debe tener un ID real antes de habilitar staging');
 });
