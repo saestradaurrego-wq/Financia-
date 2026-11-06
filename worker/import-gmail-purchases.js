@@ -29,16 +29,21 @@ export async function importGmailPurchases(request,env) {
   if(!Array.isArray(purchases)||purchases.length<1||purchases.length>20) {
     return json({ok:false,error:'Compras invalidas'},400);
   }
+  const seenIds=new Set();
   for(const p of purchases) {
     const date=p?.bookedAt;
     const validDate=typeof date==='string'&&/^\d{4}-\d{2}-\d{2}$/.test(date)&&
       !Number.isNaN(Date.parse(date))&&new Date(date).toISOString().slice(0,10)===date;
     if(typeof p?.transactionId!=='string'||p.transactionId.length<8||p.transactionId.length>200||
        typeof p.description!=='string'||!p.description.trim()||p.description.length>200||
-       !Number.isSafeInteger(p.amountMinor)||p.amountMinor===0||
+       !Number.isSafeInteger(p.amountMinor)||p.amountMinor>=0||
        p.currencyCode!=='CLP'||!validDate) {
       return json({ok:false,error:'Datos invalidos'},400);
     }
+    if(seenIds.has(p.transactionId)) {
+      return json({ok:false,error:'ID repetido en el lote'},400);
+    }
+    seenIds.add(p.transactionId);
   }
   try {
     const account=await env.DB.prepare(
