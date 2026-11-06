@@ -18,6 +18,7 @@ function financiaV2EnviarComprasDePrueba(compras) {
   if (!Array.isArray(compras) || compras.length < 1 || compras.length > 20) {
     throw new Error('Se requiere entre 1 y 20 compras validadas.');
   }
+  var ids = Object.create(null);
   compras.forEach(function (c) {
     if (!c || typeof c.transactionId !== 'string' || c.transactionId.length < 8 ||
         typeof c.description !== 'string' || !c.description.trim() ||
@@ -25,6 +26,13 @@ function financiaV2EnviarComprasDePrueba(compras) {
         c.currencyCode !== 'CLP' || !/^\d{4}-\d{2}-\d{2}$/.test(c.bookedAt)) {
       throw new Error('Compra inválida: revisar ID, comercio, monto CLP y fecha.');
     }
+    if (c.transactionId.length > 200 || c.description.length > 200 ||
+        c.amountMinor >= 0 ||
+        new Date(c.bookedAt).toISOString().slice(0, 10) !== c.bookedAt) {
+      throw new Error('Compra inválida: fecha, monto o longitud incorrectos.');
+    }
+    if (ids[c.transactionId]) throw new Error('ID repetido dentro del lote.');
+    ids[c.transactionId] = true;
   });
   var response = UrlFetchApp.fetch(base + '/api/v2/import/gmail', {
     method: 'post',
