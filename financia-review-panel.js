@@ -38,6 +38,7 @@
     list.replaceChildren();
     status.textContent = 'Cargando movimientos…';
     try {
+      await api.readiness();
       const data = await api.listPending();
       const movements = Array.isArray(data.movements) ? data.movements : [];
       status.textContent = movements.length ? movements.length + ' movimiento(s) pendiente(s)' : 'No hay compras pendientes.';
