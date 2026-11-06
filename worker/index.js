@@ -11,6 +11,12 @@ const json = (body, status=200) => Response.json(body,{
   status,headers:{'Cache-Control':'no-store'}
 });
 
+// Evitar que fallas inesperadas expongan detalles internos o de la base de datos.
+async function safeRoute(handler) {
+  try { return await handler(); }
+  catch { return json({ok:false,error:'Error interno del servidor'},500); }
+}
+
 function allowedOrigin(request, env) {
   const origin = request.headers.get('Origin');
   if (!origin || !env.FINANCIA_ALLOWED_ORIGIN) return null;
@@ -37,6 +43,7 @@ export default {
 
     const url = new URL(request.url);
     let response;
+    response = await safeRoute(async () => {
     if (url.pathname === '/api/v2/health' && request.method === 'GET') {
       response = json({ok:true,service:'financia-api-v2'});
     } else if (url.pathname === '/api/v2/movements/pending') {
@@ -59,6 +66,8 @@ export default {
     } else {
       response = json({ok:false,error:'Ruta no encontrada'},404);
     }
+    return response;
+    });
     const headers = new Headers(response.headers);
     headers.set('Cache-Control','no-store');
     if (allowed) {
