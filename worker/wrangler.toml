@@ -1,6 +1,6 @@
-// Configuracion de ejemplo para un Worker API v2 separado.
-// No despliega nada automaticamente; requiere configurar el binding DB
-// con el ID real de la base de datos en Cloudflare antes de desplegar.
+# Configuracion de ejemplo para un Worker API v2 separado.
+# No despliega nada automaticamente; requiere configurar el binding DB
+# con el ID real de la base de datos en Cloudflare antes de desplegar.
 name = "financia-api-v2-staging"
 main = "index.js"
 compatibility_date = "2026-10-01"
