@@ -75,3 +75,30 @@ test('API v2: no expone cabeceras CORS ante un origen no autorizado', async () =
   assert.equal(res.headers.get('Access-Control-Allow-Origin'),null);
   assert.equal(res.headers.get('Cache-Control'),'no-store');
 });
+
+test('API v2: readiness rechaza D1 sin configurar', async () => {
+  const res=await api.fetch(new Request('https://example.com/api/v2/ready'),{});
+  assert.equal(res.status,503);
+  assert.equal((await res.json()).ready,false);
+  assert.equal(res.headers.get('Cache-Control'),'no-store');
+});
+
+test('API v2: readiness rechaza esquema D1 incompleto', async () => {
+  const res=await api.fetch(new Request('https://example.com/api/v2/ready'),{
+    DB:{prepare(){return {async first(){throw Error('tabla no existe');}};}}
+  });
+  assert.equal(res.status,503);
+  assert.equal((await res.json()).ready,false);
+});
+
+test('API v2: readiness confirma tablas esenciales en D1', async () => {
+  const sql=[];
+  const res=await api.fetch(new Request('https://example.com/api/v2/ready'),{
+    DB:{prepare(query){sql.push(query);return {async first(){return null;}};}}
+  });
+  assert.equal(res.status,200);
+  assert.equal((await res.json()).ready,true);
+  assert.equal(sql.length,2);
+  assert.match(sql[0],/bank_accounts_v2/);
+  assert.match(sql[1],/bank_movements_v2/);
+});
