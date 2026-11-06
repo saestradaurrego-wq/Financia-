@@ -6,6 +6,7 @@ import { reviewBankMovement } from './review-bank-movement.js';
 import { getEntitlements } from './entitlements.js';
 import { createPendingMovement } from './create-pending-movement.js';
 import { bankAccounts } from './bank-accounts.js';
+import { importGmailPurchases } from './import-gmail-purchases.js';
 
 const json = (body, status=200) => Response.json(body,{
   status,headers:{'Cache-Control':'no-store'}
@@ -59,6 +60,8 @@ export default {
           response = json({ok:false,ready:false,error:'Base de datos no preparada'},503);
         }
       }
+    } else if (url.pathname === '/api/v2/import/gmail') {
+      response = await importGmailPurchases(request,env);
     } else if (url.pathname === '/api/v2/movements/pending') {
       response = await listPendingMovements(request,env);
     } else if (url.pathname === '/api/v2/movements/review') {
