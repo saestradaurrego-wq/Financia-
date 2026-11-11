@@ -1401,6 +1401,17 @@ document.addEventListener('click', function (e) {
 });
 document.addEventListener('submit', function (e) {
   var form = e.target.closest('form[data-form]'); if (!form) return; e.preventDefault();
+  if (form.dataset.form === 'import-approve') {
+    var category = form.querySelector('#f-import-category').value;
+    var account = form.querySelector('#f-import-account').value.trim();
+    if (!cats('expense').some(function (c) { return c.name === category }) || !account || account.length > 80) {
+      toast('Selecciona una categoría válida y una cuenta.'); return;
+    }
+    var id = form.dataset.id;
+    closeDlg();
+    resolveImported(id, 'confirmada', category, account);
+    return;
+  }
   ({ movement: submitMovement, goal: submitGoal, contrib: submitContrib, debt: submitDebt, category: submitCategory })[form.dataset.form](form);
 });
 function submitCategory(form) {
