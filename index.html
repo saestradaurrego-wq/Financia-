@@ -989,12 +989,26 @@ function importedHTML() {
   else if (!imported.loaded) out += '<p class="muted">Presiona Actualizar para consultar las compras pendientes.</p>';
   else if (!imported.items.length) out += '<p class="muted">No hay compras pendientes.</p>';
   else out += imported.items.map(function (c) {
-    return '<div class="row" style="display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;padding:12px 0;border-top:1px solid var(--line)"><div><b>' + esc(c.comercio) + '</b><p class="muted small">' + esc(c.fecha) + ' · ' + C.fmtCLP(c.monto_clp) + '</p></div><div style="display:flex;gap:8px"><button class="btn sm" data-act="import-reject" data-id="' + esc(c.id) + '">Rechazar</button><button class="btn primary sm" data-act="import-approve" data-id="' + esc(c.id) + '">Aprobar</button></div></div>';
+    return '<div class="row" style="display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;padding:12px 0;border-top:1px solid var(--line)"><div><b>' + esc(c.comercio) + '</b><p class="muted small">' + esc(c.fecha) + ' · ' + C.fmtCLP(c.monto_clp) + '</p></div><div style="display:flex;gap:8px"><button class="btn sm" data-act="import-reject" data-id="' + esc(c.id) + '">Rechazar</button><button class="btn primary sm" data-act="import-approve" data-id="' + esc(c.id) + '">Revisar y aprobar</button></div></div>';
   }).join('');
   return out + '</section>';
 }
+function approveImportedDialog(id) {
+  var item = imported.items.find(function (c) { return c.id === id; });
+  if (!item) return;
+  var categories = cats('expense');
+  if (!categories.length) { toast('Crea una categoría de gasto antes de aprobar.'); return; }
+  openDlg('<form data-form="import-approve" data-id="' + esc(id) + '">' +
+    dh('Confirmar compra bancaria') +
+    '<p class="muted">' + esc(item.comercio) + ' · ' + C.fmtCLP(item.monto_clp) + ' · ' + esc(item.fecha) + '</p>' +
+    fld('import-category', 'Categoría', '<select id="f-import-category" required>' +
+      categories.map(function (c) { return '<option value="' + esc(c.name) + '">' + esc(c.name) + '</option>'; }).join('') + '</select>') +
+    fld('import-account', 'Cuenta', '<input id="f-import-account" maxlength="80" value="Cuenta corriente" required>') +
+    '<div class="df"><button type="button" class="btn" data-act="close">Cancelar</button>' +
+    '<button type="submit" class="btn primary">Registrar gasto</button></div></form>');
+}
 var resolvingImported = false;
-async function resolveImported(id, estado) {
+async function resolveImported(id, estado, category, account) {
   if (resolvingImported) return;
   var item = imported.items.find(function (c) { return c.id === id; });
   if (!item) return;
@@ -1006,8 +1020,8 @@ async function resolveImported(id, estado) {
         if (!window.FINANCIA_CLOUD_SAVE) throw new Error('No está disponible el guardado en la nube.');
         var nextState = Object.assign({}, S, { movements: S.movements.concat([{
           id: uid(), importedId: id, type: 'expense',
-          amount: item.monto_clp, category: 'Otros', date: item.fecha,
-          desc: item.comercio, account: 'Cuenta corriente', tags: [], recurring: false
+          amount: item.monto_clp, category: category, date: item.fecha,
+          desc: item.comercio, account: account, tags: [], recurring: false
         }]) });
         // Guardar primero en Firestore: si falla, la compra sigue pendiente.
         await window.FINANCIA_CLOUD_SAVE(nextState);
@@ -1018,7 +1032,7 @@ async function resolveImported(id, estado) {
     // Si falla esta resolución, el gasto ya guardado conserva importedId y no se duplica.
     await importRequest('/api/v2/compras/' + encodeURIComponent(id) + '/resolver', {
       method: 'POST', headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({ estado: estado, categoria: estado === 'confirmada' ? 'Otros' : null })
+      body: JSON.stringify({ estado: estado, categoria: estado === 'confirmada' ? category : null })
     });
     imported.items = imported.items.filter(function (c) { return c.id !== id; });
     toast(estado === 'confirmada' ? 'Compra registrada y aprobada.' : 'Compra rechazada.');
@@ -1309,7 +1323,7 @@ function applyAlloc(base, key) {
 /* ---------- Eventos ---------- */
 var H = {
   'import-refresh': function () { refreshImported(); },
-  'import-approve': function (el) { resolveImported(el.dataset.id, 'confirmada'); },
+  'import-approve': function (el) { approveImportedDialog(el.dataset.id); },
   'import-reject': function (el) { resolveImported(el.dataset.id, 'rechazada'); },
   nav: function (el, e) { e.preventDefault(); setRoute(el.dataset.route); },
   close: function () { closeDlg(); },
