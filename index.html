@@ -954,13 +954,13 @@ function movListHTML() {
 var imported = { items: [], loading: false, loaded: false, error: '' };
 var IMPORT_API_KEY = 'financia.compras.api.' + (window.FINANCIA_UID || 'local');
 function importApiBase() {
-  try { return String(window.FINANCIA_COMPRAS_API_BASE || localStorage.getItem(IMPORT_API_KEY) || '').trim().replace(/\\/$/, ''); }
-  catch (e) { return String(window.FINANCIA_COMPRAS_API_BASE || '').trim().replace(/\\/$/, ''); }
+  try { return String(window.FINANCIA_COMPRAS_API_BASE || localStorage.getItem(IMPORT_API_KEY) || '').trim().replace(/\/$/, ''); }
+  catch (e) { return String(window.FINANCIA_COMPRAS_API_BASE || '').trim().replace(/\/$/, ''); }
 }
 function configureImportApi() {
   var value = prompt('Dirección HTTPS de tu API de compras (sin contraseña):', importApiBase());
   if (value === null) return;
-  value = value.trim().replace(/\\/$/, '');
+  value = value.trim().replace(/\/$/, '');
   if (value) {
     try {
       var url = new URL(value);
