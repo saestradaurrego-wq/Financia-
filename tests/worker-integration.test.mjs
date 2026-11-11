@@ -1,3 +1,4 @@
+import fs from 'node:fs';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import worker from '../cloudflare/worker-compras-v2.js';
@@ -64,4 +65,10 @@ test('rechaza fechas inexistentes y montos negativos',async()=>{
     assert.equal(response.status,400);
   }
   assert.equal(e.DB.rows.length,0);
+});
+
+test('resolver compras permite reintentos idénticos sin saltarse el propietario',()=>{
+  const src=fs.readFileSync(new URL('../cloudflare/worker-compras-v2.js',import.meta.url),'utf8');
+  assert.match(src,/SELECT estado,categoria FROM compras_pendientes_v2 WHERE id=\\? AND owner_uid=\\?/);
+  assert.match(src,/ya_resuelta:true/);
 });
