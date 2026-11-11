@@ -1031,7 +1031,9 @@ async function resolveImported(id, estado, category, account) {
       var duplicate = S.movements.some(function (m) { return m.importedId === id; });
       if (!duplicate) {
         if (!window.FINANCIA_CLOUD_SAVE) throw new Error('No está disponible el guardado en la nube.');
-        var nextRules = Object.assign({}, S.merchantRules || {});\n        nextRules[merchantKey(item.comercio)] = { category: category, account: account };\n        var nextState = Object.assign({}, S, { merchantRules: nextRules, movements: S.movements.concat([{
+        var nextRules = Object.assign({}, S.merchantRules || {});
+        nextRules[merchantKey(item.comercio)] = { category: category, account: account };
+        var nextState = Object.assign({}, S, { merchantRules: nextRules, movements: S.movements.concat([{
           id: uid(), importedId: id, type: 'expense',
           amount: item.monto_clp, category: category, date: item.fecha,
           desc: item.comercio, account: account, tags: [], recurring: false
