@@ -137,7 +137,17 @@ export default {
         const result = await env.DB.prepare(
           "UPDATE compras_pendientes_v2 SET estado=?, categoria=?, updated_at=CURRENT_TIMESTAMP WHERE id=? AND owner_uid=? AND estado='pendiente'"
         ).bind(body.estado,body.categoria || null,match[1],uid).run();
-        if (result.meta.changes !== 1) return json({error:'Compra inexistente o ya resuelta'},409,headers);
+        if (result.meta.changes !== 1) {
+          // Respuesta idempotente para reintentos tras un corte de conexión:
+          // solo si la resolución previa coincide con lo solicitado.
+          const existing = await env.DB.prepare(
+            "SELECT estado,categoria FROM compras_pendientes_v2 WHERE id=? AND owner_uid=? LIMIT 1"
+          ).bind(match[1],uid).first();
+          if (existing && existing.estado === body.estado &&
+              (existing.categoria || null) === (body.categoria || null))
+            return json({ok:true,estado:body.estado,ya_resuelta:true},200,headers);
+          return json({error:'Compra inexistente o ya resuelta con otro estado'},409,headers);
+        }
         return json({ok:true,estado:body.estado},200,headers);
       }
       return json({error:'Ruta no encontrada'},404,headers);
