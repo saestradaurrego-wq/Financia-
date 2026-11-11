@@ -860,7 +860,7 @@ function shell() {
   var nav = items.map(function (it) { return '<a href="#' + it[0] + '" data-act="nav" data-route="' + it[0] + '"' + (ui.route === it[0] ? ' aria-current="page"' : '') + '>' + ic(it[1]) + '<span>' + ROUTES[it[0]] + '</span></a>'; }).join('');
   var dark = document.documentElement.getAttribute('data-theme') === 'dark' || (!document.documentElement.getAttribute('data-theme') && window.matchMedia && matchMedia('(prefers-color-scheme: dark)').matches);
   return '<div class="shell"><aside class="side" aria-label="Navegación"><div class="brand" aria-label="Financia, tus finanzas personales"><svg viewBox="0 0 40 40" aria-hidden="true" focusable="false"><rect width="40" height="40" rx="12" fill="#123B35"/><path d="M9 28V21h5v7M18 28V15h5v13M27 28V10h5v18" fill="#55C99A"/><path d="M8 17l8-5 6 3 10-7" fill="none" stroke="#FFFFFF" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/></svg><span class="brand-name">Financia</span></div>' +
-    '<nav class="nav">' + nav + '</nav><div class="side-foot"><button class="btn sm" data-act="theme">' + ic(dark ? 'sun' : 'moon') + (dark ? 'Modo claro' : 'Modo oscuro') + '</button><p class="hint">Tus datos se guardan solo en este navegador.</p></div></aside>' +
+    '<nav class="nav">' + nav + '</nav><div class="side-foot"><button class="btn sm" data-act="theme">' + ic(dark ? 'sun' : 'moon') + (dark ? 'Modo claro' : 'Modo oscuro') + '</button><p class="hint">Tus datos se sincronizan con tu cuenta cuando la conexión a Firebase está disponible.</p></div></aside>' +
     '<main class="main"><div class="main-in" id="main"></div></main></div><nav class="bottomnav" aria-label="Navegación">' + items.map(function (it) { return '<a href="#' + it[0] + '" data-act="nav" data-route="' + it[0] + '"' + (ui.route === it[0] ? ' aria-current="page"' : '') + '>' + ic(it[1]) + '<span>' + ROUTES[it[0]] + '</span></a>'; }).join('') + '</nav>';
 }
 function topbar(title, sub, withMonth, extra) {
@@ -936,9 +936,72 @@ function movListHTML() {
   var inc = all.filter(function (m) { return m.type === 'income'; }).reduce(function (s, m) { return s + m.amount; }, 0), exp = all.filter(function (m) { return m.type === 'expense'; }).reduce(function (s, m) { return s + m.amount; }, 0);
   return '<div class="summary-strip"><span>' + all.length + (all.length === 1 ? ' movimiento' : ' movimientos') + '</span><span>Ingresos <b class="pos num">' + C.fmtCLP(inc) + '</b></span><span>Gastos <b class="num">' + C.fmtCLP(exp) + '</b></span><span>Resultado <b class="num ' + (inc - exp >= 0 ? 'pos' : 'neg') + '">' + C.fmtCLP(inc - exp) + '</b></span></div><ul class="mlist">' + shown.map(movRow.bind(null, true)).join('') + '</ul>' + (all.length > shown.length ? '<div class="actions" style="justify-content:center;margin-top:10px"><button class="btn" data-act="more">Mostrar más (' + (all.length - shown.length) + ' restantes)</button></div>' : '');
 }
+/* ---------- Compras importadas: solo lectura y resolución autorizada ---------- */
+var imported = { items: [], loading: false, loaded: false, error: '' };
+async function importRequest(path, options) {
+  var user = window.firebase && firebase.auth().currentUser;
+  if (!user) throw new Error('Inicia sesión nuevamente para consultar tus compras.');
+  var token = await user.getIdToken();
+  var base = String(window.FINANCIA_COMPRAS_API_BASE || '').replace(/\\/$/, '');
+  if (!base) throw new Error('Falta configurar la dirección de la API de compras.');
+  var target = new URL(base + path, location.origin);
+  if (target.protocol !== 'https:' && target.hostname !== 'localhost') throw new Error('La API requiere HTTPS.');
+  var response = await fetch(target.href, Object.assign({
+    method: 'GET', headers: { authorization: 'Bearer ' + token }, cache: 'no-store'
+  }, options || {}));
+  var data = await response.json().catch(function () { return {}; });
+  if (!response.ok) throw new Error(data.error || 'No se pudo conectar con las compras.');
+  return data;
+}
+async function refreshImported() {
+  if (imported.loading) return;
+  imported.loading = true; imported.error = '';
+  render();
+  try {
+    var data = await importRequest('/api/v2/compras/pendientes');
+    imported.items = Array.isArray(data.compras) ? data.compras : [];
+    imported.loaded = true;
+  } catch (e) { imported.error = e.message || 'Error de conexión'; }
+  finally { imported.loading = false; if (ui.route === 'movimientos') render(); }
+}
+function importedHTML() {
+  var out = '<section class="card"><div class="card-h"><div><h2>Compras bancarias pendientes</h2><p>Revisa los avisos importados antes de registrarlos como gastos.</p></div><button class="btn sm" data-act="import-refresh"' + (imported.loading ? ' disabled' : '') + '>Actualizar</button></div>';
+  if (imported.error) out += '<p role="alert" class="neg">' + esc(imported.error) + '</p>';
+  if (imported.loading) out += '<p class="muted">Consultando compras…</p>';
+  else if (!imported.loaded) out += '<p class="muted">Presiona Actualizar para consultar las compras pendientes.</p>';
+  else if (!imported.items.length) out += '<p class="muted">No hay compras pendientes.</p>';
+  else out += imported.items.map(function (c) {
+    return '<div class="row" style="display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;padding:12px 0;border-top:1px solid var(--line)"><div><b>' + esc(c.comercio) + '</b><p class="muted small">' + esc(c.fecha) + ' · ' + C.fmtCLP(c.monto_clp) + '</p></div><div style="display:flex;gap:8px"><button class="btn sm" data-act="import-reject" data-id="' + esc(c.id) + '">Rechazar</button><button class="btn primary sm" data-act="import-approve" data-id="' + esc(c.id) + '">Aprobar</button></div></div>';
+  }).join('');
+  return out + '</section>';
+}
+async function resolveImported(id, estado) {
+  var item = imported.items.find(function (c) { return c.id === id; });
+  if (!item) return;
+  if (estado === 'confirmada') {
+    var duplicate = S.movements.some(function (m) { return m.importedId === id; });
+    if (duplicate) { toast('Este gasto ya está registrado.'); return; }
+  }
+  try {
+    await importRequest('/api/v2/compras/' + encodeURIComponent(id) + '/resolver', {
+      method: 'POST', headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ estado: estado, categoria: estado === 'confirmada' ? 'Otros' : null })
+    });
+    imported.items = imported.items.filter(function (c) { return c.id !== id; });
+    if (estado === 'confirmada') {
+      // Guardar el ID de origen evita contabilizar dos veces la misma compra en el cliente.
+      S.movements.push({ id: uid(), importedId: id, type: 'expense',
+        amount: item.monto_clp, category: 'Otros', date: item.fecha,
+        desc: item.comercio, account: 'Cuenta corriente', tags: [], recurring: false });
+      save();
+      toast('Compra aprobada y registrada como gasto.');
+    } else toast('Compra rechazada.');
+    render();
+  } catch (e) { toast(e.message || 'No se pudo resolver la compra.'); }
+}
 function viewMovs() {
   var f = ui.f, allCats = S.categories.map(function (c) { return c.name; }).filter(function (n, i, a) { return a.indexOf(n) === i; });
-  return topbar('Movimientos', 'Registra, busca y exporta tus ingresos y gastos', false, '<button class="btn" data-act="export-csv">' + ic('copy') + 'Exportar CSV</button><button class="btn pos" data-act="new-mov" data-type="income">' + ic('plus') + 'Ingreso</button><button class="btn primary" data-act="new-mov" data-type="expense">' + ic('minus') + 'Gasto</button>') + demoBanner() + storageBanner() +
+  return topbar('Movimientos', 'Registra, busca y exporta tus ingresos y gastos', false, '<button class="btn" data-act="export-csv">' + ic('copy') + 'Exportar CSV</button><button class="btn pos" data-act="new-mov" data-type="income">' + ic('plus') + 'Ingreso</button><button class="btn primary" data-act="new-mov" data-type="expense">' + ic('minus') + 'Gasto</button>') + demoBanner() + storageBanner() + importedHTML() +
     '<section class="card"><div class="filters" role="search">' +
     '<div class="fld"><label for="flt-q">Buscar</label><input id="flt-q" type="search" data-filter="q" placeholder="Descripción, etiqueta…" value="' + esc(f.q) + '"></div>' +
     '<div class="fld"><label for="flt-type">Tipo</label><select id="flt-type" data-filter="type"><option value="">Todos</option><option value="income"' + (f.type === 'income' ? ' selected' : '') + '>Ingresos</option><option value="expense"' + (f.type === 'expense' ? ' selected' : '') + '>Gastos</option></select></div>' +
@@ -1215,6 +1278,9 @@ function applyAlloc(base, key) {
 
 /* ---------- Eventos ---------- */
 var H = {
+  'import-refresh': function () { refreshImported(); },
+  'import-approve': function (el) { resolveImported(el.dataset.id, 'confirmada'); },
+  'import-reject': function (el) { resolveImported(el.dataset.id, 'rechazada'); },
   nav: function (el, e) { e.preventDefault(); setRoute(el.dataset.route); },
   close: function () { closeDlg(); },
   theme: function () {
