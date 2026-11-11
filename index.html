@@ -2,6 +2,11 @@
 <title>Financia | Finanzas personales</title>
 <meta name="description" content="Organiza tus ingresos, gastos, presupuestos, metas de ahorro y deudas con Financia.">
 <meta name="theme-color" content="#0F2A55">
+<link rel="manifest" href="/manifest.webmanifest">
+<link rel="icon" href="/icons/financia.svg" type="image/svg+xml">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<meta name="apple-mobile-web-app-title" content="Financia">
 <meta name="claude:viewport-fit-sides" content="cover">
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,500;12..96,700&family=Figtree:wght@400;500;600;700&display=swap">
 <style>
@@ -615,9 +620,18 @@ dialog form,.dbody{display:flex;flex-direction:column;gap:14px;padding:20px}
         window.FINANCIA_UID = user.uid;
         window.FINANCIA_USER = { displayName: user.displayName || '', email: user.email || '', photoURL: user.photoURL || '' };
         window.FINANCIA_INITIAL_STATE = snap.exists && snap.data() && snap.data().state ? snap.data().state : null;
+        // Serializar escrituras para evitar que una petición antigua sobrescriba
+        // una aprobación, restauración o borrado más reciente.
+        var cloudWriteQueue = Promise.resolve();
         window.FINANCIA_CLOUD_SAVE = function (state) {
           if (!window.FINANCIA_UID) return Promise.reject(new Error('Sesión no disponible'));
-          return ref.set({ state: state, updatedAt: firebase.firestore.FieldValue.serverTimestamp() }, { merge: true });
+          var snapshot = JSON.parse(JSON.stringify(state));
+          var write = cloudWriteQueue.then(function () {
+            if (!auth.currentUser || auth.currentUser.uid !== user.uid) throw new Error('La sesión cambió');
+            return ref.set({ state: snapshot, updatedAt: firebase.firestore.FieldValue.serverTimestamp() }, { merge: true });
+          });
+          cloudWriteQueue = write.catch(function () {});
+          return write;
         };
         window.FINANCIA_CLOUD_SIGNOUT = function () { return auth.signOut(); };
         window.FINANCIA_CLOUD_READY = true;
@@ -674,7 +688,7 @@ function blank() {
     version: 1,
     settings: { theme: null, openingBalance: 0, demoOpening: 0, monthlyIncome: 0, pcts: { needs: 50, wants: 30, savings: 20 }, showDemo: true, alerts: true, onboarded: false },
     categories: EXP_CATS.map(function (c) { return { name: c[0], type: 'expense', bucket: c[1] }; }).concat(INC_CATS.map(function (n) { return { name: n, type: 'income' }; })),
-    movements: [], budgets: {}, goals: [], debts: []
+    movements: [], budgets: {}, goals: [], debts: [], merchantRules: {}
   };
 }
 function sane(s) {
@@ -860,7 +874,7 @@ function shell() {
   var nav = items.map(function (it) { return '<a href="#' + it[0] + '" data-act="nav" data-route="' + it[0] + '"' + (ui.route === it[0] ? ' aria-current="page"' : '') + '>' + ic(it[1]) + '<span>' + ROUTES[it[0]] + '</span></a>'; }).join('');
   var dark = document.documentElement.getAttribute('data-theme') === 'dark' || (!document.documentElement.getAttribute('data-theme') && window.matchMedia && matchMedia('(prefers-color-scheme: dark)').matches);
   return '<div class="shell"><aside class="side" aria-label="Navegación"><div class="brand" aria-label="Financia, tus finanzas personales"><svg viewBox="0 0 40 40" aria-hidden="true" focusable="false"><rect width="40" height="40" rx="12" fill="#123B35"/><path d="M9 28V21h5v7M18 28V15h5v13M27 28V10h5v18" fill="#55C99A"/><path d="M8 17l8-5 6 3 10-7" fill="none" stroke="#FFFFFF" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/></svg><span class="brand-name">Financia</span></div>' +
-    '<nav class="nav">' + nav + '</nav><div class="side-foot"><button class="btn sm" data-act="theme">' + ic(dark ? 'sun' : 'moon') + (dark ? 'Modo claro' : 'Modo oscuro') + '</button><p class="hint">Tus datos se guardan solo en este navegador.</p></div></aside>' +
+    '<nav class="nav">' + nav + '</nav><div class="side-foot"><button class="btn sm" data-act="theme">' + ic(dark ? 'sun' : 'moon') + (dark ? 'Modo claro' : 'Modo oscuro') + '</button><p class="hint">Tus datos se sincronizan con tu cuenta cuando la conexión a Firebase está disponible.</p></div></aside>' +
     '<main class="main"><div class="main-in" id="main"></div></main></div><nav class="bottomnav" aria-label="Navegación">' + items.map(function (it) { return '<a href="#' + it[0] + '" data-act="nav" data-route="' + it[0] + '"' + (ui.route === it[0] ? ' aria-current="page"' : '') + '>' + ic(it[1]) + '<span>' + ROUTES[it[0]] + '</span></a>'; }).join('') + '</nav>';
 }
 function topbar(title, sub, withMonth, extra) {
@@ -936,9 +950,138 @@ function movListHTML() {
   var inc = all.filter(function (m) { return m.type === 'income'; }).reduce(function (s, m) { return s + m.amount; }, 0), exp = all.filter(function (m) { return m.type === 'expense'; }).reduce(function (s, m) { return s + m.amount; }, 0);
   return '<div class="summary-strip"><span>' + all.length + (all.length === 1 ? ' movimiento' : ' movimientos') + '</span><span>Ingresos <b class="pos num">' + C.fmtCLP(inc) + '</b></span><span>Gastos <b class="num">' + C.fmtCLP(exp) + '</b></span><span>Resultado <b class="num ' + (inc - exp >= 0 ? 'pos' : 'neg') + '">' + C.fmtCLP(inc - exp) + '</b></span></div><ul class="mlist">' + shown.map(movRow.bind(null, true)).join('') + '</ul>' + (all.length > shown.length ? '<div class="actions" style="justify-content:center;margin-top:10px"><button class="btn" data-act="more">Mostrar más (' + (all.length - shown.length) + ' restantes)</button></div>' : '');
 }
+/* ---------- Compras importadas: solo lectura y resolución autorizada ---------- */
+var imported = { items: [], loading: false, loaded: false, error: '' };
+var IMPORT_API_KEY = 'financia.compras.api.' + (window.FINANCIA_UID || 'local');
+function importApiBase() {
+  try { return String(window.FINANCIA_COMPRAS_API_BASE || localStorage.getItem(IMPORT_API_KEY) || '').trim().replace(/\/$/, ''); }
+  catch (e) { return String(window.FINANCIA_COMPRAS_API_BASE || '').trim().replace(/\/$/, ''); }
+}
+function configureImportApi() {
+  var value = prompt('Dirección HTTPS de tu API de compras (sin contraseña):', importApiBase());
+  if (value === null) return;
+  value = value.trim().replace(/\/$/, '');
+  if (value) {
+    try {
+      var url = new URL(value);
+      if (url.protocol !== 'https:' || url.username || url.password || url.search || url.hash || url.pathname !== '/') throw new Error();
+      value = url.origin;
+    } catch (e) { toast('Ingresa solo el origen HTTPS de la API, por ejemplo https://ejemplo.workers.dev'); return; }
+  }
+  try { if (value) localStorage.setItem(IMPORT_API_KEY, value); else localStorage.removeItem(IMPORT_API_KEY); }
+  catch (e) { toast('No se pudo guardar la configuración en este navegador.'); return; }
+  imported.loaded = false; imported.items = []; imported.error = '';
+  render();
+}
+async function importRequest(path, options) {
+  var user = window.firebase && firebase.auth().currentUser;
+  if (!user) throw new Error('Inicia sesión nuevamente para consultar tus compras.');
+  var token = await user.getIdToken();
+  var base = importApiBase();
+  if (!base) throw new Error('Falta configurar la dirección de la API de compras.');
+  var target = new URL(base + path, location.origin);
+  if (target.protocol !== 'https:' && target.hostname !== 'localhost') throw new Error('La API requiere HTTPS.');
+  var opts = options || {};
+  var response = await fetch(target.href, {
+    method: opts.method || 'GET',
+    headers: Object.assign({ authorization: 'Bearer ' + token }, opts.headers || {}),
+    body: opts.body,
+    cache: 'no-store'
+  });
+  var data = await response.json().catch(function () { return {}; });
+  if (!response.ok) throw new Error(data.error || 'No se pudo conectar con las compras.');
+  return data;
+}
+async function refreshImported() {
+  if (imported.loading) return;
+  imported.loading = true; imported.error = '';
+  render();
+  try {
+    var data = await importRequest('/api/v2/compras/pendientes');
+    imported.items = Array.isArray(data.compras) ? data.compras : [];
+    imported.loaded = true;
+  } catch (e) { imported.error = e.message || 'Error de conexión'; }
+  finally { imported.loading = false; if (ui.route === 'movimientos') render(); }
+}
+function importedHTML() {
+  var out = '<section class="card"><div class="card-h"><div><h2>Compras bancarias pendientes</h2><p>Revisa los avisos importados antes de registrarlos como gastos.</p></div><div style="display:flex;gap:8px;flex-wrap:wrap"><button class="btn sm" data-act="import-config">Configurar API</button><button class="btn sm" data-act="import-refresh"' + (imported.loading ? ' disabled' : '') + '>Actualizar</button></div></div>';
+  if (imported.error) out += '<p role="alert" class="neg">' + esc(imported.error) + '</p>';
+  if (imported.loading) out += '<p class="muted">Consultando compras…</p>';
+  else if (!imported.loaded) out += '<p class="muted">Presiona Actualizar para consultar las compras pendientes.</p>';
+  else if (!imported.items.length) out += '<p class="muted">No hay compras pendientes.</p>';
+  else out += imported.items.map(function (c) {
+    return '<div class="row" style="display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;padding:12px 0;border-top:1px solid var(--line)"><div><b>' + esc(c.comercio) + '</b><p class="muted small">' + esc(c.fecha) + ' · ' + esc(c.banco || 'Banco sin identificar') + ' · ' + C.fmtCLP(c.monto_clp) + '</p></div><div style="display:flex;gap:8px"><button class="btn sm" data-act="import-reject" data-id="' + esc(c.id) + '">Rechazar</button><button class="btn primary sm" data-act="import-approve" data-id="' + esc(c.id) + '">Revisar y aprobar</button></div></div>';
+  }).join('');
+  return out + '</section>';
+}
+function merchantKey(name) {
+  return String(name || '').normalize('NFKC').toLocaleLowerCase('es-CL')
+    .replace(/[^\p{L}\p{N}]+/gu, ' ').trim().replace(/\s+/g, ' ').slice(0, 120);
+}
+function merchantSuggestion(item) {
+  var rules = S.merchantRules && typeof S.merchantRules === 'object' && !Array.isArray(S.merchantRules) ? S.merchantRules : {};
+  var rule = Object.prototype.hasOwnProperty.call(rules, merchantKey(item.comercio)) ? rules[merchantKey(item.comercio)] : null;
+  if (!rule || typeof rule.category !== 'string' || typeof rule.account !== 'string' ||
+      !cats('expense').some(function (c) { return c.name === rule.category })) return null;
+  return rule;
+}
+function approveImportedDialog(id) {
+  var item = imported.items.find(function (c) { return c.id === id; });
+  if (!item) return;
+  var categories = cats('expense');
+  var suggestion = merchantSuggestion(item);
+  if (!categories.length) { toast('Crea una categoría de gasto antes de aprobar.'); return; }
+  openDlg('<form data-form="import-approve" data-id="' + esc(id) + '">' +
+    dh('Confirmar compra bancaria') +
+    '<p class="muted">' + esc(item.comercio) + ' · ' + esc(item.banco || 'Banco sin identificar') + ' · ' + C.fmtCLP(item.monto_clp) + ' · ' + esc(item.fecha) + '</p>' +
+    (suggestion ? '<p class="muted small">Categoría y cuenta sugeridas según tu última aprobación de este comercio. Puedes cambiarlas.</p>' : '') +
+    fld('import-category', 'Categoría', '<select id="f-import-category" required>' +
+      categories.map(function (c) { return '<option value="' + esc(c.name) + '"' + (suggestion && suggestion.category === c.name ? ' selected' : '') + '>' + esc(c.name) + '</option>'; }).join('') + '</select>') +
+    fld('import-account', 'Cuenta', '<input id="f-import-account" maxlength="80" value="Cuenta corriente" required>') +
+    '<div class="df"><button type="button" class="btn" data-act="close">Cancelar</button>' +
+    '<button type="submit" class="btn primary">Registrar gasto</button></div></form>');
+}
+var resolvingImported = false;
+async function resolveImported(id, estado, category, account) {
+  if (resolvingImported) return;
+  var item = imported.items.find(function (c) { return c.id === id; });
+  if (!item) return;
+  resolvingImported = true;
+  try {
+    if (estado === 'confirmada') {
+      var duplicate = S.movements.some(function (m) { return m.importedId === id; });
+      if (!duplicate) {
+        if (!window.FINANCIA_CLOUD_SAVE) throw new Error('No está disponible el guardado en la nube.');
+        var nextRules = Object.assign({}, S.merchantRules || {});
+        nextRules[merchantKey(item.comercio)] = { category: category, account: account };
+        var nextState = Object.assign({}, S, { merchantRules: nextRules, movements: S.movements.concat([{
+          id: uid(), importedId: id, importedBank: item.banco || 'no_identificado', type: 'expense',
+          amount: item.monto_clp, category: category, date: item.fecha,
+          desc: item.comercio, account: account, tags: [], recurring: false
+        }]) });
+        // Guardar primero en Firestore: si falla, la compra sigue pendiente.
+        await window.FINANCIA_CLOUD_SAVE(nextState);
+        S = nextState;
+        try { localStorage.setItem(KEY, JSON.stringify(S)); } catch (e) { storageOK = false; }
+      }
+    }
+    // Si falla esta resolución, el gasto ya guardado conserva importedId y no se duplica.
+    await importRequest('/api/v2/compras/' + encodeURIComponent(id) + '/resolver', {
+      method: 'POST', headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ estado: estado, categoria: estado === 'confirmada' ? category : null })
+    });
+    imported.items = imported.items.filter(function (c) { return c.id !== id; });
+    toast(estado === 'confirmada' ? 'Compra registrada y aprobada.' : 'Compra rechazada.');
+  } catch (e) {
+    toast(e.message || 'No se pudo resolver la compra. Puedes volver a intentarlo.');
+  } finally {
+    resolvingImported = false;
+    render();
+  }
+}
 function viewMovs() {
   var f = ui.f, allCats = S.categories.map(function (c) { return c.name; }).filter(function (n, i, a) { return a.indexOf(n) === i; });
-  return topbar('Movimientos', 'Registra, busca y exporta tus ingresos y gastos', false, '<button class="btn" data-act="export-csv">' + ic('copy') + 'Exportar CSV</button><button class="btn pos" data-act="new-mov" data-type="income">' + ic('plus') + 'Ingreso</button><button class="btn primary" data-act="new-mov" data-type="expense">' + ic('minus') + 'Gasto</button>') + demoBanner() + storageBanner() +
+  return topbar('Movimientos', 'Registra, busca y exporta tus ingresos y gastos', false, '<button class="btn" data-act="export-csv">' + ic('copy') + 'Exportar CSV</button><button class="btn pos" data-act="new-mov" data-type="income">' + ic('plus') + 'Ingreso</button><button class="btn primary" data-act="new-mov" data-type="expense">' + ic('minus') + 'Gasto</button>') + demoBanner() + storageBanner() + importedHTML() +
     '<section class="card"><div class="filters" role="search">' +
     '<div class="fld"><label for="flt-q">Buscar</label><input id="flt-q" type="search" data-filter="q" placeholder="Descripción, etiqueta…" value="' + esc(f.q) + '"></div>' +
     '<div class="fld"><label for="flt-type">Tipo</label><select id="flt-type" data-filter="type"><option value="">Todos</option><option value="income"' + (f.type === 'income' ? ' selected' : '') + '>Ingresos</option><option value="expense"' + (f.type === 'expense' ? ' selected' : '') + '>Gastos</option></select></div>' +
@@ -1215,6 +1358,10 @@ function applyAlloc(base, key) {
 
 /* ---------- Eventos ---------- */
 var H = {
+  'import-config': function () { configureImportApi(); },
+  'import-refresh': function () { refreshImported(); },
+  'import-approve': function (el) { approveImportedDialog(el.dataset.id); },
+  'import-reject': function (el) { resolveImported(el.dataset.id, 'rechazada'); },
   nav: function (el, e) { e.preventDefault(); setRoute(el.dataset.route); },
   close: function () { closeDlg(); },
   theme: function () {
@@ -1257,7 +1404,23 @@ var H = {
       S = s; save(); closeDlg(); toast('Datos restaurados'); render();
     } catch (e) { err.textContent = 'El texto no es un respaldo válido de Financia.'; }
   },
-  wipe: function () { confirmDlg('Eliminar todos mis datos', 'Se borrará todo lo guardado en este navegador: movimientos, presupuestos, metas, deudas y ajustes. No se puede deshacer.', 'Eliminar todo', function () { S = blank(); try { localStorage.removeItem(KEY); } catch (e) {} closeDlg(); ui.route = 'resumen'; render(); toast('Datos eliminados'); openOnboarding(0); }); },
+  wipe: function () {
+    confirmDlg('Eliminar todos mis datos', 'Se borrarán tus movimientos, presupuestos, metas, deudas y ajustes de esta cuenta, tanto en este dispositivo como en la nube. No se puede deshacer.', 'Eliminar todo', async function () {
+      var emptyState = blank();
+      try {
+        if (!window.FINANCIA_CLOUD_SAVE) { toast('No hay conexión de guardado en la nube. No se borró nada.'); return; }
+        if (cloudSaveTimer) { clearTimeout(cloudSaveTimer); cloudSaveTimer = null; }
+        await window.FINANCIA_CLOUD_SAVE(emptyState);
+        S = emptyState;
+        try { localStorage.setItem(KEY, JSON.stringify(S)); } catch (e) { storageOK = false; }
+        closeDlg(); ui.route = 'resumen'; render();
+        toast('Tus datos se eliminaron de la cuenta y del almacenamiento local.');
+        openOnboarding(0);
+      } catch (e) {
+        toast('No se pudo confirmar el borrado en la nube. Tus datos siguen visibles; vuelve a intentarlo.');
+      }
+    });
+  },
   onboarding: function () { ui.ob = null; openOnboarding(0); },
   'ob-later': function () { S.settings.onboarded = true; save(); ui.ob = null; closeDlg(); render(); },
   'ob-back': function () { obRead(); ui.ob.step = Math.max(0, ui.ob.step - 1); renderOb(); },
@@ -1275,6 +1438,17 @@ document.addEventListener('click', function (e) {
 });
 document.addEventListener('submit', function (e) {
   var form = e.target.closest('form[data-form]'); if (!form) return; e.preventDefault();
+  if (form.dataset.form === 'import-approve') {
+    var category = form.querySelector('#f-import-category').value;
+    var account = form.querySelector('#f-import-account').value.trim();
+    if (!cats('expense').some(function (c) { return c.name === category }) || !account || account.length > 80) {
+      toast('Selecciona una categoría válida y una cuenta.'); return;
+    }
+    var id = form.dataset.id;
+    closeDlg();
+    resolveImported(id, 'confirmada', category, account);
+    return;
+  }
   ({ movement: submitMovement, goal: submitGoal, contrib: submitContrib, debt: submitDebt, category: submitCategory })[form.dataset.form](form);
 });
 function submitCategory(form) {
@@ -1312,4 +1486,4 @@ window.addEventListener('hashchange', function () { var h = (location.hash || ''
 })();
 </script>
 
-</body></html>
+<script>if ("serviceWorker" in navigator && location.protocol === "https:") { window.addEventListener("load", function () { navigator.serviceWorker.register("/sw.js").catch(function () {}); }); }</script></body></html>
