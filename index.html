@@ -688,7 +688,7 @@ function blank() {
     version: 1,
     settings: { theme: null, openingBalance: 0, demoOpening: 0, monthlyIncome: 0, pcts: { needs: 50, wants: 30, savings: 20 }, showDemo: true, alerts: true, onboarded: false },
     categories: EXP_CATS.map(function (c) { return { name: c[0], type: 'expense', bucket: c[1] }; }).concat(INC_CATS.map(function (n) { return { name: n, type: 'income' }; })),
-    movements: [], budgets: {}, goals: [], debts: []
+    movements: [], budgets: {}, goals: [], debts: [], merchantRules: {}
   };
 }
 function sane(s) {
@@ -993,16 +993,29 @@ function importedHTML() {
   }).join('');
   return out + '</section>';
 }
+function merchantKey(name) {
+  return String(name || '').normalize('NFKC').toLocaleLowerCase('es-CL')
+    .replace(/[^\\p{L}\\p{N}]+/gu, ' ').trim().replace(/\\s+/g, ' ').slice(0, 120);
+}
+function merchantSuggestion(item) {
+  var rules = S.merchantRules && typeof S.merchantRules === 'object' && !Array.isArray(S.merchantRules) ? S.merchantRules : {};
+  var rule = Object.prototype.hasOwnProperty.call(rules, merchantKey(item.comercio)) ? rules[merchantKey(item.comercio)] : null;
+  if (!rule || typeof rule.category !== 'string' || typeof rule.account !== 'string' ||
+      !cats('expense').some(function (c) { return c.name === rule.category })) return null;
+  return rule;
+}
 function approveImportedDialog(id) {
   var item = imported.items.find(function (c) { return c.id === id; });
   if (!item) return;
   var categories = cats('expense');
+  var suggestion = merchantSuggestion(item);
   if (!categories.length) { toast('Crea una categoría de gasto antes de aprobar.'); return; }
   openDlg('<form data-form="import-approve" data-id="' + esc(id) + '">' +
     dh('Confirmar compra bancaria') +
     '<p class="muted">' + esc(item.comercio) + ' · ' + C.fmtCLP(item.monto_clp) + ' · ' + esc(item.fecha) + '</p>' +
+    (suggestion ? '<p class="muted small">Categoría y cuenta sugeridas según tu última aprobación de este comercio. Puedes cambiarlas.</p>' : '') +
     fld('import-category', 'Categoría', '<select id="f-import-category" required>' +
-      categories.map(function (c) { return '<option value="' + esc(c.name) + '">' + esc(c.name) + '</option>'; }).join('') + '</select>') +
+      categories.map(function (c) { return '<option value="' + esc(c.name) + '"' + (suggestion && suggestion.category === c.name ? ' selected' : '') + '>' + esc(c.name) + '</option>'; }).join('') + '</select>') +
     fld('import-account', 'Cuenta', '<input id="f-import-account" maxlength="80" value="Cuenta corriente" required>') +
     '<div class="df"><button type="button" class="btn" data-act="close">Cancelar</button>' +
     '<button type="submit" class="btn primary">Registrar gasto</button></div></form>');
@@ -1018,7 +1031,7 @@ async function resolveImported(id, estado, category, account) {
       var duplicate = S.movements.some(function (m) { return m.importedId === id; });
       if (!duplicate) {
         if (!window.FINANCIA_CLOUD_SAVE) throw new Error('No está disponible el guardado en la nube.');
-        var nextState = Object.assign({}, S, { movements: S.movements.concat([{
+        var nextRules = Object.assign({}, S.merchantRules || {});\n        nextRules[merchantKey(item.comercio)] = { category: category, account: account };\n        var nextState = Object.assign({}, S, { merchantRules: nextRules, movements: S.movements.concat([{
           id: uid(), importedId: id, type: 'expense',
           amount: item.monto_clp, category: category, date: item.fecha,
           desc: item.comercio, account: account, tags: [], recurring: false
