@@ -6,7 +6,7 @@
  * seguras de Cloudflare, nunca en el navegador ni en GitHub.
  *
  * El endpoint de ingestión solo permite la cuenta INGEST_OWNER_UID.
- * Para múltiples cuentas bancarias se necesitará un vínculo verificado por usuario.
+ * Admite múltiples bancos por propietario; múltiples usuarios requieren vinculación verificada.
  */
 const json = (data, status = 200, headers = {}) =>
   new Response(JSON.stringify(data), {
@@ -102,7 +102,9 @@ export default {
           return json({error:'No autorizado'},401,headers);
         const body = await readSmallJson(request);
         if (!body || typeof body !== 'object' || Array.isArray(body)) return json({error:'Formato inválido'},400,headers);
-        const {external_id,comercio,monto_clp,fecha} = body;
+        const {external_id,comercio,monto_clp,fecha,banco} = body;
+        const bank = typeof banco === 'string' ? banco.trim().toLowerCase() : 'no_identificado';
+        if (!/^[a-z0-9][a-z0-9_-]{1,49}$/.test(bank)) return json({error:'Banco inválido'},400,headers);
         if (typeof external_id !== 'string' || !/^[A-Za-z0-9:_-]{8,160}$/.test(external_id) ||
             typeof comercio !== 'string' || !comercio.trim() || comercio.length > 160 ||
             !Number.isSafeInteger(monto_clp) || monto_clp <= 0 || monto_clp > 1000000000 ||
@@ -111,8 +113,8 @@ export default {
           return json({error:'Datos de compra inválidos'},400,headers);
         const id = crypto.randomUUID();
         const result = await env.DB.prepare(
-          'INSERT OR IGNORE INTO compras_pendientes_v2 (id,owner_uid,external_id,comercio,monto_clp,fecha) VALUES (?,?,?,?,?,?)'
-        ).bind(id,env.INGEST_OWNER_UID,external_id,comercio.trim(),monto_clp,fecha).run();
+          'INSERT OR IGNORE INTO compras_pendientes_v2 (id,owner_uid,external_id,comercio,monto_clp,fecha,banco) VALUES (?,?,?,?,?,?,?)'
+        ).bind(id,env.INGEST_OWNER_UID,bank + ':' + external_id,comercio.trim(),monto_clp,fecha,bank).run();
         return json({ok:true,insertada:result.meta.changes === 1,duplicada:result.meta.changes === 0},200,headers);
       }
       if (!path.startsWith('/api/v2/compras')) return json({error:'Ruta no encontrada'},404,headers);
@@ -123,7 +125,7 @@ export default {
       catch (_) { return json({error:'Sesión no válida'},401,headers); }
       if (path === '/api/v2/compras/pendientes' && request.method === 'GET') {
         const result = await env.DB.prepare(
-          "SELECT id,comercio,monto_clp,fecha,categoria,created_at FROM compras_pendientes_v2 WHERE owner_uid=? AND estado='pendiente' ORDER BY created_at DESC LIMIT 100"
+          "SELECT id,banco,comercio,monto_clp,fecha,categoria,created_at FROM compras_pendientes_v2 WHERE owner_uid=? AND estado='pendiente' ORDER BY created_at DESC LIMIT 100"
         ).bind(uid).all();
         return json({compras:result.results},200,headers);
       }
