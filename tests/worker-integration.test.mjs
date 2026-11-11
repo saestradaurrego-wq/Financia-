@@ -69,6 +69,6 @@ test('rechaza fechas inexistentes y montos negativos',async()=>{
 
 test('resolver compras permite reintentos idénticos sin saltarse el propietario',()=>{
   const src=fs.readFileSync(new URL('../cloudflare/worker-compras-v2.js',import.meta.url),'utf8');
-  assert.match(src,/SELECT estado,categoria FROM compras_pendientes_v2 WHERE id=\\? AND owner_uid=\\?/);
+  assert.match(src,/SELECT estado,categoria FROM compras_pendientes_v2 WHERE id=\? AND owner_uid=\?/);
   assert.match(src,/ya_resuelta:true/);
 });
