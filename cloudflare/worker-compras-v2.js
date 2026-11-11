@@ -50,6 +50,38 @@ async function verifyFirebaseToken(token, projectId) {
   if (!valid) throw Error('Firma inválida');
   return claims.sub;
 }
+async function readSmallJson(request, maxBytes = 16384) {
+  const declared = Number(request.headers.get('content-length') || 0);
+  if (declared > maxBytes) {
+    const error = new Error('Solicitud demasiado grande'); error.status = 413; throw error;
+  }
+  const reader = request.body?.getReader();
+  if (!reader) { const error = new Error('Cuerpo requerido'); error.status = 400; throw error; }
+  let total = 0;
+  const chunks = [];
+  try {
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      total += value.byteLength;
+      if (total > maxBytes) {
+        await reader.cancel();
+        const error = new Error('Solicitud demasiado grande'); error.status = 413; throw error;
+      }
+      chunks.push(value);
+    }
+  } finally { reader.releaseLock(); }
+  const raw = new Uint8Array(total);
+  let offset = 0;
+  for (const chunk of chunks) { raw.set(chunk, offset); offset += chunk.byteLength; }
+  try { return JSON.parse(new TextDecoder('utf-8', { fatal: true }).decode(raw)); }
+  catch (_) { const error = new Error('JSON inválido'); error.status = 400; throw error; }
+}
+function validISODate(value) {
+  if (typeof value !== 'string' || !/^\\d{4}-\\d{2}-\\d{2}$/.test(value)) return false;
+  const d = new Date(value + 'T12:00:00Z');
+  return !Number.isNaN(d.getTime()) && d.toISOString().slice(0, 10) === value;
+}
 function cors(request, env) {
   const origin = request.headers.get('origin');
   return origin && origin === env.ALLOWED_ORIGIN ?
@@ -68,8 +100,7 @@ export default {
         if (!env.INGEST_SECRET || !env.INGEST_OWNER_UID ||
             !safeEqual(request.headers.get('x-ingest-secret'),env.INGEST_SECRET))
           return json({error:'No autorizado'},401,headers);
-        if (Number(request.headers.get('content-length') || 0) > 16384) return json({error:'Solicitud demasiado grande'},413,headers);
-        const body = await request.json();
+        const body = await readSmallJson(request);
         if (!body || typeof body !== 'object' || Array.isArray(body)) return json({error:'Formato inválido'},400,headers);
         const {external_id,comercio,monto_clp,fecha} = body;
         if (typeof external_id !== 'string' || !/^[A-Za-z0-9:_-]{8,160}$/.test(external_id) ||
@@ -98,7 +129,7 @@ export default {
       }
       const match = /^\/api\/v2\/compras\/([0-9a-f-]{36})\/resolver$/.exec(path);
       if (match && request.method === 'POST') {
-        const body = await request.json();
+        const body = await readSmallJson(request);
         if (!body || !['confirmada','rechazada'].includes(body.estado) ||
             (body.categoria != null && (typeof body.categoria !== 'string' || body.categoria.length > 80)))
           return json({error:'Resolución inválida'},400,headers);
@@ -110,7 +141,7 @@ export default {
       }
       return json({error:'Ruta no encontrada'},404,headers);
     } catch (e) {
-      return json({error:'No fue posible procesar la solicitud'},500,headers);
+      return json({error: e.status === 400 ? 'JSON inválido' : e.status === 413 ? 'Solicitud demasiado grande' : 'No fue posible procesar la solicitud'},e.status === 400 || e.status === 413 ? e.status : 500,headers);
     }
   }
 };
