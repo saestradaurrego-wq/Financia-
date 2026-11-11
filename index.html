@@ -620,9 +620,18 @@ dialog form,.dbody{display:flex;flex-direction:column;gap:14px;padding:20px}
         window.FINANCIA_UID = user.uid;
         window.FINANCIA_USER = { displayName: user.displayName || '', email: user.email || '', photoURL: user.photoURL || '' };
         window.FINANCIA_INITIAL_STATE = snap.exists && snap.data() && snap.data().state ? snap.data().state : null;
+        // Serializar escrituras para evitar que una petición antigua sobrescriba
+        // una aprobación, restauración o borrado más reciente.
+        var cloudWriteQueue = Promise.resolve();
         window.FINANCIA_CLOUD_SAVE = function (state) {
           if (!window.FINANCIA_UID) return Promise.reject(new Error('Sesión no disponible'));
-          return ref.set({ state: state, updatedAt: firebase.firestore.FieldValue.serverTimestamp() }, { merge: true });
+          var snapshot = JSON.parse(JSON.stringify(state));
+          var write = cloudWriteQueue.then(function () {
+            if (!auth.currentUser || auth.currentUser.uid !== user.uid) throw new Error('La sesión cambió');
+            return ref.set({ state: snapshot, updatedAt: firebase.firestore.FieldValue.serverTimestamp() }, { merge: true });
+          });
+          cloudWriteQueue = write.catch(function () {});
+          return write;
         };
         window.FINANCIA_CLOUD_SIGNOUT = function () { return auth.signOut(); };
         window.FINANCIA_CLOUD_READY = true;
