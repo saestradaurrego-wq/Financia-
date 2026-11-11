@@ -946,9 +946,13 @@ async function importRequest(path, options) {
   if (!base) throw new Error('Falta configurar la dirección de la API de compras.');
   var target = new URL(base + path, location.origin);
   if (target.protocol !== 'https:' && target.hostname !== 'localhost') throw new Error('La API requiere HTTPS.');
-  var response = await fetch(target.href, Object.assign({
-    method: 'GET', headers: { authorization: 'Bearer ' + token }, cache: 'no-store'
-  }, options || {}));
+  var opts = options || {};
+  var response = await fetch(target.href, {
+    method: opts.method || 'GET',
+    headers: Object.assign({ authorization: 'Bearer ' + token }, opts.headers || {}),
+    body: opts.body,
+    cache: 'no-store'
+  });
   var data = await response.json().catch(function () { return {}; });
   if (!response.ok) throw new Error(data.error || 'No se pudo conectar con las compras.');
   return data;
