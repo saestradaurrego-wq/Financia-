@@ -995,7 +995,7 @@ function importedHTML() {
 }
 function merchantKey(name) {
   return String(name || '').normalize('NFKC').toLocaleLowerCase('es-CL')
-    .replace(/[^\\p{L}\\p{N}]+/gu, ' ').trim().replace(/\\s+/g, ' ').slice(0, 120);
+    .replace(/[^\p{L}\p{N}]+/gu, ' ').trim().replace(/\s+/g, ' ').slice(0, 120);
 }
 function merchantSuggestion(item) {
   var rules = S.merchantRules && typeof S.merchantRules === 'object' && !Array.isArray(S.merchantRules) ? S.merchantRules : {};
