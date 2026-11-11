@@ -78,7 +78,7 @@ async function readSmallJson(request, maxBytes = 16384) {
   catch (_) { const error = new Error('JSON inválido'); error.status = 400; throw error; }
 }
 function validISODate(value) {
-  if (typeof value !== 'string' || !/^\\d{4}-\\d{2}-\\d{2}$/.test(value)) return false;
+  if (typeof value !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(value)) return false;
   const d = new Date(value + 'T12:00:00Z');
   return !Number.isNaN(d.getTime()) && d.toISOString().slice(0, 10) === value;
 }
@@ -108,8 +108,7 @@ export default {
         if (typeof external_id !== 'string' || !/^[A-Za-z0-9:_-]{8,160}$/.test(external_id) ||
             typeof comercio !== 'string' || !comercio.trim() || comercio.length > 160 ||
             !Number.isSafeInteger(monto_clp) || monto_clp <= 0 || monto_clp > 1000000000 ||
-            typeof fecha !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(fecha) ||
-            Number.isNaN(Date.parse(fecha+'T12:00:00Z')))
+            !validISODate(fecha))
           return json({error:'Datos de compra inválidos'},400,headers);
         const id = crypto.randomUUID();
         const result = await env.DB.prepare(
