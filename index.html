@@ -1257,7 +1257,7 @@ var H = {
       S = s; save(); closeDlg(); toast('Datos restaurados'); render();
     } catch (e) { err.textContent = 'El texto no es un respaldo válido de Financia.'; }
   },
-  wipe: function () { confirmDlg('Eliminar todos mis datos', 'Se borrará todo lo guardado en este navegador: movimientos, presupuestos, metas, deudas y ajustes. No se puede deshacer.', 'Eliminar todo', function () { S = blank(); try { localStorage.removeItem(KEY); } catch (e) {} closeDlg(); ui.route = 'resumen'; render(); toast('Datos eliminados'); openOnboarding(0); }); },
+  wipe: function () { confirmDlg('Eliminar todos mis datos', 'Se borrará todo lo guardado en este navegador: movimientos, presupuestos, metas, deudas y ajustes. No se puede deshacer.', 'Eliminar todo', function () { S = blank(); save(); closeDlg(); ui.route = 'resumen'; render(); toast('Se solicitó borrar los datos; comprueba que la sincronización termine antes de cerrar.'); openOnboarding(0); }); },
   onboarding: function () { ui.ob = null; openOnboarding(0); },
   'ob-later': function () { S.settings.onboarded = true; save(); ui.ob = null; closeDlg(); render(); },
   'ob-back': function () { obRead(); ui.ob.step = Math.max(0, ui.ob.step - 1); renderOb(); },
