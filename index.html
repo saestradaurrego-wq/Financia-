@@ -1010,7 +1010,7 @@ function importedHTML() {
   else if (!imported.loaded) out += '<p class="muted">Presiona Actualizar para consultar las compras pendientes.</p>';
   else if (!imported.items.length) out += '<p class="muted">No hay compras pendientes.</p>';
   else out += imported.items.map(function (c) {
-    return '<div class="row" style="display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;padding:12px 0;border-top:1px solid var(--line)"><div><b>' + esc(c.comercio) + '</b><p class="muted small">' + esc(c.fecha) + ' · ' + C.fmtCLP(c.monto_clp) + '</p></div><div style="display:flex;gap:8px"><button class="btn sm" data-act="import-reject" data-id="' + esc(c.id) + '">Rechazar</button><button class="btn primary sm" data-act="import-approve" data-id="' + esc(c.id) + '">Revisar y aprobar</button></div></div>';
+    return '<div class="row" style="display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;padding:12px 0;border-top:1px solid var(--line)"><div><b>' + esc(c.comercio) + '</b><p class="muted small">' + esc(c.fecha) + ' · ' + esc(c.banco || 'Banco sin identificar') + ' · ' + C.fmtCLP(c.monto_clp) + '</p></div><div style="display:flex;gap:8px"><button class="btn sm" data-act="import-reject" data-id="' + esc(c.id) + '">Rechazar</button><button class="btn primary sm" data-act="import-approve" data-id="' + esc(c.id) + '">Revisar y aprobar</button></div></div>';
   }).join('');
   return out + '</section>';
 }
@@ -1033,7 +1033,7 @@ function approveImportedDialog(id) {
   if (!categories.length) { toast('Crea una categoría de gasto antes de aprobar.'); return; }
   openDlg('<form data-form="import-approve" data-id="' + esc(id) + '">' +
     dh('Confirmar compra bancaria') +
-    '<p class="muted">' + esc(item.comercio) + ' · ' + C.fmtCLP(item.monto_clp) + ' · ' + esc(item.fecha) + '</p>' +
+    '<p class="muted">' + esc(item.comercio) + ' · ' + esc(item.banco || 'Banco sin identificar') + ' · ' + C.fmtCLP(item.monto_clp) + ' · ' + esc(item.fecha) + '</p>' +
     (suggestion ? '<p class="muted small">Categoría y cuenta sugeridas según tu última aprobación de este comercio. Puedes cambiarlas.</p>' : '') +
     fld('import-category', 'Categoría', '<select id="f-import-category" required>' +
       categories.map(function (c) { return '<option value="' + esc(c.name) + '"' + (suggestion && suggestion.category === c.name ? ' selected' : '') + '>' + esc(c.name) + '</option>'; }).join('') + '</select>') +
@@ -1055,7 +1055,7 @@ async function resolveImported(id, estado, category, account) {
         var nextRules = Object.assign({}, S.merchantRules || {});
         nextRules[merchantKey(item.comercio)] = { category: category, account: account };
         var nextState = Object.assign({}, S, { merchantRules: nextRules, movements: S.movements.concat([{
-          id: uid(), importedId: id, type: 'expense',
+          id: uid(), importedId: id, importedBank: item.banco || 'no_identificado', type: 'expense',
           amount: item.monto_clp, category: category, date: item.fecha,
           desc: item.comercio, account: account, tags: [], recurring: false
         }]) });
